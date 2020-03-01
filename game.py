@@ -1,734 +1,308 @@
-import pygame
-import sys
-import time
-
-from pygame.locals import *
-
-pygame.init()
-width = 1272
-height = 720
-black = 0, 0, 0
-white = 255, 255, 255
-red = 200,0,0
-green = 0,200,0
-blue = 0, 0, 100
-bright_red = (255,0,0)
-bright_green = (0,255,0)
-bright_blue = (0, 0, 255)
-grey = 102,102,102
-backgroundIntro = 56,142,142
-icon = pygame.image.load("./sprites/icon.jpg")
-pygame.display.set_icon(icon)
-gameDisplay = pygame.display.set_mode((width, height))
-pygame.display.set_caption('Puzzle Game')
-clock = pygame.time.Clock()
-continued = False
-current_level = "level1.lvl"
-next_level = "level2.lvl"
-
-def pause():
-    paused = True
-    pygame.draw.rect(gameDisplay, grey, (440, 200, 400, 80))
-    largeText = pygame.font.Font('freesansbold.ttf', 50)
-    TextSurf, TextRect = text_objects("Game Paused!", largeText, white)
-    TextRect.center = ((width / 2), (height / 3))
-    gameDisplay.blit(TextSurf, TextRect)
-
-    pygame.draw.rect(gameDisplay, grey, (340, 320, 590, 70))
-    mediumText = pygame.font.Font('freesansbold.ttf', 30)
-    TextSurf, TextRect = text_objects("Press 'C' to Continue or 'Q' to Quit", mediumText, white)
-    TextRect.center = ((width / 2), (height / 2))
-    gameDisplay.blit(TextSurf, TextRect)
-    pygame.display.update()
-
-    while paused:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == K_c:
-                    paused = False
-                #ullupdate = True
-                elif event.key == K_q:
-                    pygame.quit()
-                    quit()
-
-
-def button(msg,x,y,w,h,ic,ac,action=None):
-    mouse = pygame.mouse.get_pos()
-    click = pygame.mouse.get_pressed()
-    #print(click)
-    if x+w > mouse[0] > x and y+h > mouse[1] > y:
-        pygame.draw.rect(gameDisplay, ac,(x,y,w,h))
-
-        if click[0] == 1 and action != None:
-            action()
-    else:
-        pygame.draw.rect(gameDisplay, ic,(x,y,w,h))
-
-    smallText = pygame.font.SysFont("comicsansms",20)
-    textSurf, textRect = text_objects(msg, smallText, black)
-    textRect.center = ( (x+(w/2)), (y+(h/2)) )
-    gameDisplay.blit(textSurf, textRect)
-
-
-def text_objects(text, font, color):
-    textSurface = font.render(text, True, color)
-    return textSurface, textSurface.get_rect()
-
-
-def message_display(text):
-    largeText = pygame.font.Font('freesansbold.ttf', 115)
-    TextSurf, TextRect = text_objects("Puzzle Game", largeText)
-    TextRect.center = ((width / 2), (height / 2))
-    gameDisplay.blit(TextSurf, TextRect)
-    pygame.display.update()
-    time.sleep(2)
-    game()
-
-
-def game_intro():
-    intro = True
-    backImg = pygame.image.load("background.jpg")
-    while intro:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
-        gameDisplay.fill(backgroundIntro)
-        largeText = pygame.font.Font('freesansbold.ttf',115)
-        #TextSurf, TextRect = text_objects("Puzzle Game", largeText, black)
-        #TextRect.center = ((width/2),(height/2))
-        #gameDisplay.blit(TextSurf, TextRect)
-        gameDisplay.blit((backImg), (0, 0))
-        button("Start", 600, 450, 100, 50, green, bright_green, game)
-        button("Continue", 600, 550, 100, 50, blue, bright_blue, continue_game)
-        button("Quit", 600, 650, 100, 50, red, bright_red, quitgame)
-        pygame.display.update()
-        clock.tick(80)
-
-
-def quitgame():
-    quit()
-
-
-def load_settings():
-    global current_level, next_level
-    try:
-        file = open("settings.ini")
-        current_level = file.readline()
-        file.close()
-        level = open("./levels/" + current_level)
-        for i, line in enumerate(level):
-            if i == 30:
-                next_level = line
-        level.close()
-    except IOError:
-        current_level = "level1.lvl"
-        next_level = "level2.lvl"
-
-
-def save_settings(saved_level):
-    global current_level
-    file = open("settings.ini", 'w')
-    file.write(saved_level)
-    file.close()
-
-
-def continue_game():
-    global continued
-    try:
-        if open("settings.ini") is False:
-            continued = False
-        else:
-            continued = True
-    except IOError:
-        continued = False
-    game()
-
-def GameOver():
-    goscreen = pygame.image.load("GameOver.jpg")
-    gameDisplay.blit(goscreen, (0,0))
-    pygame.display.flip()
-    while 1:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                sys.exit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == K_q:
-                    sys.exit()
-
-
-def game():
-    pygame.init()
-
-    characterpath = "./characters/Jill/"
-    objectpath = "./sprites/"
-
-    size = width, height = 1272, 720
-    black = 0, 0, 0
-    gameObjs = []
-    barrier_objects = []
-    movebox_objects = []
-    switch_objects = []
-    plate_objects = []
-    teleporter_objects = []
-
-    global current_level, next_level, continued
-
-    if continued is False:
-        current_level = "level1.lvl"
-        next_level = "level1.lv2"
-    else:
-        load_settings()
-
-    unit_size = 24
-    fullupdate = True
-    green = (0, 255, 0)
-    blue = (0, 0, 128)
-
-    #jumping = False
-    face_direction = 1
-    # 0: Left  1: Right
-
-    screen = pygame.display.set_mode(size)
-
-    pygame.mixer.music.load("./sounds/BGM.wav")
-    # Patakas World
-    # www.dl-sounds.com
-    pygame.mixer.music.play(-1)
-
+"""
+doorsound.wav
     # Credit to Michael Baradari
     # Release under CC-BY 3.0
-    barrier_sound = pygame.mixer.Sound('./sounds/doorsound.wav')
-
+jump.wav
     # Credit to Jesús Lastra
     # Public Domain CC0
-    jump_sound = pygame.mixer.Sound('./sounds/jump.wav')
-
+box_drop.wav
     # Credit to  Dan Knoflicek
     # Release under CC-BY 3.0
-    box_sound = pygame.mixer.Sound('./sounds/box_drop.wav')
-
-    pygame.display.set_caption("Puzzle Box")
-
-    class Player(pygame.sprite.Sprite):
-
-        def __init__(self):
-            pygame.sprite.Sprite.__init__(self)
-            starting_position = 500, 500
-            self.img = pygame.image.load(characterpath + "Right.gif")
-            # Source: opengameart.org
-            # Name from source: Sara and Star
-            # Artist: Mandi Paugh
-            self.rect = self.img.get_rect()
-            self.coordinates = starting_position
-            self.rect.x, self.rect.y = self.coordinates
-            self.jumping = False
-            self.falling = False
-            self.jump_distance = 0
-            self.jump_height = 75
-            self.speedX = 0
-            self.speedY = 0
-            self.accelY = 0
-            self.max_accel = 30
-            self.max_speed = 5
-            self.carrying = [False]
-            self.teleported = False
-
-        def teleport(self, game_obj):
-            player.rect.x = game_obj.rect.x + 8
-            player.rect.y = game_obj.rect.y
-            player.coordinates = (player.rect.x, player.rect.y)
-            if player.carrying[0] == True:
-                player.carrying[1].rect.x = player.rect.x + 4
-                player.carrying[1].rect.y = player.rect.y - 24
-                player.carrying[1].coordinates = (player.carrying[1].rect.x, player.carrying[1].rect.y)
-            player.teleported = True
-
-        def check_collision(self, game_obj):
-            collided = pygame.sprite.collide_rect(self, game_obj)
-            if collided:
-                if game_obj.get_type() in ['floor', 'wall', 'ClosedBarrier']:
-                    if (self.rect.y + 45 <= game_obj.rect.y) and self.falling:
-                        # using this as there is no other instance where both should be true at the same time
-                        self.update_position(0, -3)
-                        if self.carrying[0]:
-                            self.carrying[1].update_position(0,-3)
-                        self.jumping = False
-                        self.falling = False
-                        self.jump_distance = 0
-                    elif (self.rect.x <= game_obj.rect.x) and (self.rect.y > (game_obj.rect.y - 47)):
-                        self.update_position(-4, 0)
-                        if self.carrying[0]:
-                            self.carrying[1].update_position(-4, 0)
-                    elif (self.rect.x >= game_obj.rect.x) and (self.rect.y > (game_obj.rect.y - 47)):
-                        self.update_position(4, 0)
-                        if self.carrying[0]:
-                            self.carrying[1].update_position(4 ,0)
-                    if (pygame.sprite.collide_rect(self, game_obj)) and (self.rect.y > game_obj.rect.y):
-                        self.update_position(0, 3)
-                        if self.carrying[0]:
-                            self.carrying[1].update_position(0,3)
-                        self.jumping = False
-                        self.falling = True
-
-                elif game_obj.get_type() == "goal":
-                    for x in range(-3, 3):
-                        for y in range(-3, 3):
-                            if (self.rect.x + x == game_obj.rect.x) and (self.rect.y + y == game_obj.rect.y):
-                                game_obj.collided = True
-                                return "GOAL"
-                elif game_obj.get_type() == 'redswitch':
-                    for maybe_goal in barrier_objects:
-                        if maybe_goal.get_type() in ['ClosedBarrier'] and game_obj.obj_num == maybe_goal.obj_num:
-                            maybe_goal.set_type("OpenBarrier")
-                            game_obj.collided = True
-                            game_obj.set_type('greenswitch')
-                            barrier_sound.play()
-                            return "SWITCH"
-                elif game_obj.get_type() == 'movebox':
-                    if (self.rect.y + 45 <= game_obj.rect.y) and self.falling:
-                        # using this as there is no other instance where both should be true at the same time
-                        self.update_position(0, -3)
-                        if self.carrying[0]:
-                            self.carrying[1].update_position(0, -3)
-                        self.jumping = False
-                        self.falling = False
-                        self.jump_distance = 0
-                    game_obj.collided = True
-                    return "MOVEBOX"
-                elif game_obj.get_type() == 'helpbox' and game_obj.collided == False:
-                    game_obj.collided = True
-                    return ["helpbox", int(game_obj.obj_num)]
-                game_obj.collided = True
-                return True
-            elif self.carrying[0] and (pygame.sprite.collide_rect(self.carrying[1], game_obj)):
-                game_obj.collided = True
-                if game_obj.get_type() in ['floor', 'wall', 'ClosedBarrier']:
-                    if (self.carrying[1].rect.x <= game_obj.rect.x) and (self.carrying[1].rect.y > (game_obj.rect.y - 47)):
-                        self.update_position(-4, 0)
-                        self.carrying[1].update_position(-4, 0)
-                    elif (self.carrying[1].rect.x >= game_obj.rect.x) and (self.carrying[1].rect.y > (game_obj.rect.y - 47)):
-                        self.update_position(4, 0)
-                        self.carrying[1].update_position(4, 0)
-                    if (pygame.sprite.collide_rect(self.carrying[1], game_obj)) and (self.carrying[1].rect.y > game_obj.rect.y):
-                        self.update_position(0, 3)
-                        self.carrying[1].update_position(0, 3)
-                        self.jumping = False
-                        self.falling = True
-                return True
-            elif game_obj.collided:
-                game_obj.collided = False
-                if game_obj.get_type() == 'helpbox':
-                    pygame.draw.rect(screen, black, pygame.Rect(280, 685, 700, 30))
-                    updates.append(pygame.Rect(280, 685, 700, 30))
-                return True
-            return False
-
-        def update_position(self, offset_x, offset_y):
-            self.rect.x += offset_x
-            self.rect.y += offset_y
-            self.coordinates = self.rect.x, self.rect.y
-
-        def jump(self):
-            if self.falling == True:
-                self.fall()
-            elif self.jump_distance > self.jump_height:
-                self.jumping = False
-                self.falling = True
-                self.fall()
-            elif not self.jumping:
-                jump_sound.play()
-                self.jumping = True
-            if self.jumping and not self.falling:
-                self.update_position(0, -3)
-                if self.carrying[0]:
-                    self.carrying[1].update_position(0,-3)
-                self.jump_distance += 3
-                return True
-
-        def fall(self):
-            for each in gameObjs:
-                if self.rect.y < each.rect.y - unit_size:
-                    self.falling = False
-                    self.jump_distance = 0
-                if self.rect.y > height - 48:
-                    self.rect.y = height - 48
-                    self.jump_distance = 0
-                    self.falling = False
-                else:
-                    self.update_position(0,3)
-                    if self.carrying[0]:
-                        self.carrying[1].update_position(0,3)
-                    self.falling = True
-                    return
-
-    class GameObj(pygame.sprite.Sprite):
-        def __init__(self, image_path, the_type, posx, posy):
-            pygame.sprite.Sprite.__init__(self)
-            self.img = pygame.image.load(image_path)
-            self.rect = self.img.get_rect()
-            self.coordinates = posx, posy
-            self.rect.x, self.rect.y = self.coordinates
-            self.type = str(the_type)
-            self.obj_num = '0'
-            self.collided = False
-
-        def update_position(self, offset_x, offset_y):
-            self.rect.x += offset_x
-            self.rect.y += offset_y
-            self.coordinates = self.rect.x, self.rect.y
-
-        def set_type(self, the_type):
-            self.img = pygame.image.load(objectpath + the_type + ".png")
-            self.type = str(the_type)
-
-        def get_type(self):
-            return str(self.type)
-
-        def check_collision(self, game_obj):
-            return pygame.sprite.collide_rect(self, game_obj)
-
-    def load_level(the_level):
-        gameObjs.clear()
-        plate_objects.clear()
-        barrier_objects.clear()
-        movebox_objects.clear()
-        switch_objects.clear()
-        teleporter_objects.clear
-        level = open("./levels/" + the_level)
-        helptext = []
-        for i, line in enumerate(level):
-            if i == 0:
-                starting_position = line
-            elif i == 1:
-                Levelname = line.strip()
-            elif i == 30:
-                nextlevel = line.strip()
-            elif i > 30:
-                helptext.append(line.strip()[:])
-            else:
-                for j, word in enumerate(line.split()):
-                    if word != 'empty':
-                        if not word.isalpha():
-                            words = word.split(':')
-                            if words[0] == 'plateup':
-                                new_object = GameObj("./sprites/" + str(words[0]) + ".png", str(word[0]), unit_size * j,
-                                                     unit_size * (i - 2)-4)
-                            else:
-                                new_object = GameObj("./sprites/" + str(words[0]) + ".png", str(word[0]), unit_size * j, unit_size * (i - 2))
-                            new_object.obj_num = int(words[1])
-                            new_object.type = str(words[0])
-                        else:
-                            new_object = GameObj("./sprites/" + word + ".png", word, unit_size*j, unit_size*(i-2))
-
-                        gameObjs.append(new_object)
-
-                        if new_object.type == 'plateup':
-                            obj_insert(plate_objects, new_object)
-                        if new_object.type == 'ClosedBarrier':
-                            obj_insert(barrier_objects, new_object)
-                        if new_object.type == 'movebox':
-                            movebox_objects.append(new_object)
-                        if new_object.type == 'greenswitch':
-                            switch_objects.append(new_object)
-                        if new_object.type == 'Teleporter':
-                            obj_insert(teleporter_objects, new_object)
-
-        level.close()
-        return nextlevel, starting_position, helptext, Levelname
-
-    def obj_insert(objlist, obj):
-        x = 0
-
-        while x < len(objlist):
-            if obj.obj_num < objlist[x].obj_num:
-                break
-            x += 1
-        if x == len(objlist):
-            objlist.append(obj)
-        else:
-            objlist.append(objlist[len(objlist)-1])
-            for a in range(len(objlist)-1, x, -1):
-                objlist[a] = objlist[a-1]
-            objlist[x] = obj
-
+Sprites
     # Source: opengameart.org
     # Name from source: Sara and Star
     # Artist: Mandi Paugh
+"""
 
-    player = Player()
-
-    # load the level information
-    next_level, player.coordinates, helptext, levelname = load_level(current_level)
-
-    player.rect.x = int(player.coordinates.strip().split(", ")[0])
-    player.rect.y = int(player.coordinates.strip().split(", ")[1])
-    player.coordinates = player.rect.x, player.rect.y
-
-    starttime = pygame.time.get_ticks()
-    frames = 0
-    pausetime = 0
-    while 1:
-        updates = [pygame.Rect(100, 100, 500, 100)]
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                sys.exit()
-            elif event.type == KEYDOWN:
-                if event.key == K_ESCAPE or event.key == K_p:
-                    pausestart = pygame.time.get_ticks()
-                    pause()
-                    pausestop = pygame.time.get_ticks()
-                    pausetime += (pausestop - pausestart)
-                    fullupdate = True
-
-                elif event.key == K_c:
-                    if characterpath == "./characters/Jill/":
-                        characterpath = "./characters/Jack/"
-                    elif characterpath == "./characters/Jack/":
-                        characterpath = "./characters/Jill/"
-
-                    if face_direction == 0:
-                        player.img = pygame.image.load(characterpath + "Left.gif")
-                    elif face_direction == 1:
-                        player.img = pygame.image.load(characterpath + "Right.gif")
-
-                    fullupdate = True
-                
-                elif event.key == K_k:
-                    if player.carrying[0] and not player.jumping and not player.falling:
-                        box_sound.play()
-                        player.carrying[0] = False
-                        pygame.draw.rect(screen, black, player.carrying[1].rect)
-                        updates.append(player.carrying[1].rect[:])
-                        player.carrying[1].update_position(0,48)
-                        gameObjs.append(player.carrying[1])
-                    else:
-                        for level_object in gameObjs:
-                            collided = player.check_collision(level_object)
-                            if (collided == "MOVEBOX") and (player.carrying[0] == False):
-                                player.carrying = [True, level_object]
-                                fullupdate = True
-                                gameObjs.remove(level_object)
-                                player.carrying[1].rect.x = player.rect.x + 3
-                                player.carrying[1].rect.y = player.rect.y - 24
-                                player.carrying[1].coordinates = player.carrying[1].rect.x, player.carrying[1].rect.y
-
-                elif event.key == K_r:
-                    next_level, player.coordinates, helptext, levelname = load_level(current_level)
-                    player.rect.x = int(player.coordinates.strip().split(", ")[0])
-                    player.rect.y = int(player.coordinates.strip().split(", ")[1])
-                    player.coordinates = player.rect.x, player.rect.y
-                    player.carrying[0] = False
-                    fullupdate = True
-
-                elif event.key == K_s:
-                    save_settings(current_level)
-
-        pygame.draw.rect(screen, black, player.rect)
-        updates.append(player.rect[:])
-        if player.carrying[0]:
-            pygame.draw.rect(screen, black, player.carrying[1].rect)
-            updates.append(player.carrying[1].rect[:])
-        keys = pygame.key.get_pressed()
-        if keys[K_a]:
-            player.update_position(-4, 0)
-            if player.carrying[0]:
-                player.carrying[1].update_position(-4,0)
-            face_direction = 0
-            player.img = pygame.image.load(characterpath + "Left.gif")
-            if player.coordinates[0] <= 0:
-                player.update_position(4, 0)
-                if player.carrying[0]:
-                    player.carrying[1].update_position(4, 0)
-
-        elif keys[K_d]:
-            player.update_position(4, 0)
-            if player.carrying[0]:
-                player.carrying[1].update_position(4, 0)
-            face_direction = 1
-            player.img = pygame.image.load(characterpath + "Right.gif")
-            if player.coordinates[0] >= width - 32:
-                player.update_position(-4, 0)
-                if player.carrying[0]:
-                    player.carrying[1].update_position(-4, 0)
-
-        if keys[K_j]:
-            player.jump()
-        elif not keys[K_j]:
-            player.fall()
-        if keys[K_x]:
-            fullupdate = True
-
-        for obj in barrier_objects:
-            barrieropen = False
-            matchplate = False
-            for objb in plate_objects:
-                if obj.obj_num == objb.obj_num:
-                    collision = False
-                    matchplate = True
-                    for objc in movebox_objects:
-                        if objb.check_collision(objc):
-                            collision = True
-
-                    if objb.check_collision(player):
-                        collision = True
-
-                    if collision and objb.type == "platedown":
-                        barrieropen = True
-
-                    elif collision and objb.type == "plateup":
-                        barrieropen = True
-                        objb.set_type('platedown')
-                        objb.update_position(0, 3)
-                        barrier_sound.play()
-                        fullupdate = True
-                    elif collision == False and objb.type == "platedown":
-                        objb.set_type('plateup')
-                        objb.update_position(0, -3)
-                        barrier_sound.play()
-                        fullupdate = True
-
-            if barrieropen and obj.type == "ClosedBarrier" and matchplate:
-                obj.set_type("OpenBarrier")
-                fullupdate = True
-
-            elif barrieropen == False and obj.type == "OpenBarrier" and matchplate:
-                obj.set_type("ClosedBarrier")
-                fullupdate = True
-
-        for level_object in gameObjs:
-            collided = player.check_collision(level_object)
-            if collided == "GOAL":
-
-                if next_level == "GAMEOVER":
-                    GameOver()
-
-                current_level = next_level
-                next_level, player.coordinates, helptext, levelname = load_level(next_level)
-                player.rect.x = int(player.coordinates.strip().split(", ")[0])
-                player.rect.y = int(player.coordinates.strip().split(", ")[1])
-                player.coordinates = player.rect.x, player.rect.y
-                starttime = pygame.time.get_ticks()
-                frames = 0
-                pausetime = 0
-                player.carrying[0] = False
-                fullupdate = True
-            elif collided == "SWITCH" or collided == "PLATEDOWN":
-                fullupdate = True
-            elif isinstance(collided, list):
-                if collided[0] == 'helpbox':
-                    font = pygame.font.Font('freesansbold.ttf', 24)
-                    text = font.render(helptext[collided[1] - 1], True, bright_red, black)
-                    screen.blit(text, (280, 685))
-                    updates.append(pygame.Rect(280, 685, 700, 30))
-                    screen.blit(level_object.img, level_object.coordinates)
-                    updates.append(level_object.rect)
-            elif collided:
-                if thing.type != 'Teleporter':
-                    screen.blit(level_object.img, level_object.coordinates)
-                    updates.append(level_object.rect)
-                else:
-                    pygame.draw.rect(screen, black, obj.rect)
-                    updates.append(obj.rect[:])
-                    screen.blit(obj.img, obj.coordinates)
-
-        clock.tick_busy_loop(60)
-
-        #FPS PRINT START
-        font = pygame.font.Font('freesansbold.ttf', 32)
-        currtime = pygame.time.get_ticks() + 1
-        frames += 1
-        text = font.render(str(frames / (((currtime-starttime) - pausetime) / 1000)), True, green, blue)
-        screen.blit(text, (100, 100))
-        #FPS PRINT STOP
-
-        seconds = ((currtime - starttime) - pausetime) // 1000
-        if seconds < 60:
-            text = font.render("Time: " + str(seconds) + "s", True, green, black)
-        else:
-            minutes = seconds // 60
-            second = seconds - (minutes * 60)
-            text = font.render("Time: " + str(minutes) + "m " + str(second) + "s", True, green, black)
-        pygame.draw.rect(screen, black, pygame.Rect(10,680,250,30))
-        screen.blit(text, (10, 680))
-        updates.append(pygame.Rect(10, 680, 250, 30))
-
-        telecollision = False
-        for obj in teleporter_objects:
-            collided = obj.check_collision(player)
-            if collided and player.teleported == False and player.rect.x > obj.rect.x and player.rect.x < obj.rect.x + 12:
-                if obj.obj_num % 2 == 1:
-                    player.teleport(teleporter_objects[obj.obj_num])
-                    fullupdate = True
-                else:
-                    player.teleport(teleporter_objects[obj.obj_num - 2])
-                    fullupdate = True
-            if collided == True:
-                telecollision = True
-        if telecollision == False:
-            player.teleported = False
+import os
+import sys
+import pygame as pg
+import yaml
 
 
-        if fullupdate == True:
-            screen.fill(black)
-            screen.blit(player.img, player.coordinates)
+config = {
+     'window_width': 1280
+    ,'window_height': 720
+    ,'screen_width': 1280
+    ,'screen_height': 720
+    ,'framerate': 60.0
+    ,'window_caption': 'Puzzle Game'
+    ,'color_backgroud': (24, 20, 37, 1)
+    ,'intro_backImg': 'background.jpg'
+    ,'intro_backcolor': (56, 142, 142)
+    ,'intro_buttontextcolor': (0, 0, 0)
+    ,'intro_startcolor_ic': (0, 200, 0)
+    ,'intro_startcolor_ac': (0, 255, 0)
+    ,'intro_continuecolor_ic': (0, 0, 100)
+    ,'intro_continuecolor_ac': (0, 0, 255)
+    ,'intro_quitcolor_ic': (200, 0, 0)
+    ,'intro_quitcolor_ac': (255, 0, 0)
+    ,'game_characterpath': "./characters/"
+    ,'game_spritepath': "./sprites/"
+    ,'game_tilesize': 24
+}
 
-            for thing in gameObjs:
-                screen.blit(thing.img, thing.coordinates)
-                if thing.type == "helpbox" and thing.type != 'Teleporter':
-                    thing.collided = False
-                    collided = player.check_collision(thing)
-                    if collided:
-                        font = pygame.font.Font('freesansbold.ttf', 24)
-                        text = font.render(helptext[collided[1] - 1], True, bright_red, black)
-                        screen.blit(text, (280, 685))
-                        updates.append(pygame.Rect(280, 685, 700, 30))
-                        screen.blit(level_object.img, level_object.coordinates)
+class Game_intro:
+    def __init__(self):
+        self.sf_window = pg.display.get_surface()
+        self.sf_screen = pg.Surface((config['screen_width'], config['screen_height']))
+        self.done = False
+        self.clock = pg.time.Clock()
+        self.framerate = config['framerate']
+        self.keys = pg.key.get_pressed()
 
-            font = pygame.font.Font('freesansbold.ttf', 32)
-            currtime = pygame.time.get_ticks()
-            text = font.render(str(frames / (((currtime - starttime)-pausetime) / 1000)), True, green, blue)
-            screen.blit(text, (100, 100))
+        self.backImg = pg.image.load(config['intro_backImg'])
+        self.button_start = self.Button("Start", 600, 450, 100, 50, config['intro_startcolor_ic'], config['intro_startcolor_ac'])
+        self.button_continue = self.Button("Continue", 600, 550, 100, 50, config['intro_continuecolor_ic'], config['intro_continuecolor_ac'])
+        self.button_quit = self.Button("Quit", 600, 650, 100, 50, config['intro_quitcolor_ic'], config['intro_quitcolor_ac'])
 
-            if seconds < 60:
-                text = font.render("Time: " + str(seconds) + "s", True, green, black)
+        self.result = ""
+
+    class Button:
+        def __init__(self, msg, x, y, width, height, ic, ac):
+            self.rect = pg.Rect(x, y, width, height)
+            self.color_inactive = ic
+            self.color_active = ac
+
+            self.mouse_pos = (0, 0)
+            self.mouse_click = False
+            self.hover = False
+
+            self.color = self.color_inactive
+            self.msg = msg
+            self.font = pg.font.SysFont("comicsansms", 20)
+            self.textcolor = config['intro_buttontextcolor']
+
+        def get_event(self, event):
+            self.mouse_pos = pg.mouse.get_pos()
+            self.mouse_click = False
+            if event.type == pg.MOUSEBUTTONDOWN:
+                if event.button == pg.BUTTON_LEFT:
+                    self.mouse_click = True
+
+        def update(self):
+            if self.rect.collidepoint(self.mouse_pos):
+                self.color = self.color_active
+                if self.mouse_click == True:
+                    return True
             else:
-                minutes = seconds // 60
-                second = seconds - (minutes * 60)
-                text = font.render("Time: " + str(minutes) + "m " + str(second) + "s", True, green, black)
-            screen.blit(text, (10, 680))
+                self.color = self.color_inactive
+                return False
 
-            text = font.render("Level: " + levelname, True, green, black)
-            screen.blit(text, (1000, 680))
+        def draw(self, surface):
+            pg.draw.rect(surface, self.color, self.rect)
+            textobj = self.font.render(self.msg, 1, self.textcolor)
+            textrect = textobj.get_rect()
+            textrect.center = self.rect.center
+            surface.blit(textobj, textrect)
 
-            if player.carrying[0]:
-                screen.blit(player.carrying[1].img, player.carrying[1].coordinates)
+    def event_loop(self):
+        for event in pg.event.get():
+            self.keys = pg.key.get_pressed()
+            if event.type == pg.QUIT or self.keys[pg.K_ESCAPE]:
+                self.done = True
+            self.button_start.get_event(event)
+            self.button_continue.get_event(event)
+            self.button_quit.get_event(event)
 
-            screen.blit(player.img, player.coordinates)
-            for obj in teleporter_objects:
-                updates.append(obj.rect[:])
-                screen.blit(obj.img, obj.coordinates)
+    def update(self):
+        if self.button_start.update():
+            self.result = "start"
+            self.done = True
+        if self.button_continue.update():
+            self.result = "continue"
+            self.done = True
+        if self.button_quit.update():
+            self.result = "quit"
+            self.done = True
 
-            pygame.display.flip()
-            fullupdate = False
 
+    def draw(self):
+        self.sf_screen.fill(config['intro_backcolor'])
+        self.sf_screen.blit(self.backImg, (0, 0))
+        self.button_start.draw(self.sf_screen)
+        self.button_continue.draw(self.sf_screen)
+        self.button_quit.draw(self.sf_screen)
+
+        self.sf_window.blit(pg.transform.scale(self.sf_screen, self.sf_window.get_size()), (0, 0))
+
+    def display_fps(self):
+        caption = "{} - FPS: {:.2f}".format(config['window_caption'], self.clock.get_fps())
+        pg.display.set_caption(caption)
+
+    def main_loop(self):
+        while not self.done:
+            self.event_loop()
+            self.update()
+            self.draw()
+            pg.display.update()
+            self.clock.tick(self.framerate)
+            self.display_fps()
+        return self.result
+
+class Player:
+    def __init__(self):
+        self.img_jill = pg.image.load(config['game_characterpath'] + "Jill/Right.gif").convert()
+        self.img_jack = pg.image.load(config['game_characterpath'] + "Jack/Right.gif").convert()
+        self.img = self.img_jill
+        self.rect = self.img.get_rect()
+        self.moving_left = False
+        self.moving_right = False
+        self.moving_jumping = False
+        self.facing_left = False
+        self.carrying = False
+        # self.telported = False
+
+    def move_force(self, location):
+        self.rect.x = location[0]
+        self.rect.y = location[1]
+
+    def event_loop(self):
+        pass
+
+    def update(self):
+        pass
+
+    def draw(self,screen):
+        screen.blit(self.img, (self.rect.x, self.rect.y))
+
+class Tile:
+    def __init__(self, type, unscaled_x, unscaled_y):
+        self.type = type
+        self.img = pg.image.load(config['game_spritepath'] + self.type + '.png').convert()
+        self.rect = self.img.get_rect()
+        self.rect.x = unscaled_x * config['game_tilesize']
+        self.rect.y = unscaled_y * config['game_tilesize']
+
+    # def event_loop(self):
+    #     pass
+
+    def update(self):
+        pass
+
+    def draw(self, screen):
+        screen.blit(self.img, (self.rect.x, self.rect.y))
+
+class Stage:
+    def __init__(self, levelname):
+        self.stage_data = self.load_stagedata(levelname)
+        self.level_name = self.stage_data['level_name']
+        self.level_next = self.stage_data['next_level_name']
+
+        self.playerspawn = (self.stage_data['player_spawn']['x'], self.stage_data['player_spawn']['y'])
+        self.map_data = self.stage_data['map_data']
+
+
+    def load_stagedata(self, filename):
+        path = './levels/' + filename + '.lvl'
+        with open(path) as f:
+            stage_data = yaml.safe_load(f)
+
+        map_legend = stage_data['map_legend']
+        # map_links = stage_data['map_links']
+        map_data_raw = stage_data['map_data_raw'].split('\n')
+        map_data_list = list()
+        for row in map_data_raw:
+            line = row.split(' ')
+            data = list()
+            for tile in line:
+                data.append(int(tile))
+            map_data_list.append(data)
+
+        map_data = dict()
+        for y in range(len(map_data_list)):
+            for x in range(len(map_data_list[y])):
+                type = map_legend[map_data_list[y][x]]['type']
+                # print(type)
+                if type in ['wall', 'floor', 'goal', 'helpbox']:
+                    map_data[str(x) + ';' + str(y)] = Tile(type, x, y)
+        stage_data['map_data']= map_data
+        return stage_data
+
+    # def event_loop(self):
+    #     pass
+
+    def update(self):
+        pass
+
+    def draw(self, screen):
+        for tile in self.map_data:
+            self.map_data[tile].draw(screen)
+
+class Game_logic:
+
+    def __init__(self, newgame=True):
+        self.sf_window = pg.display.get_surface()
+        self.sf_screen = pg.Surface((config['screen_width'], config['screen_height']))
+        self.sf_screen_rect = self.sf_screen.get_rect()
+        self.done = False
+        self.clock = pg.time.Clock()
+        self.framerate = config['framerate']
+        self.keys = pg.key.get_pressed()
+
+        if newgame:
+            self.stage_current = "level1"
         else:
-            screen.blit(player.img, player.coordinates)
-            updates.append(player.rect)
-            if player.carrying[0]:
-                screen.blit(player.carrying[1].img, player.carrying[1].coordinates)
-                updates.append(player.carrying[1].rect)
+            self.stage_current = "level1" # TODO in future load save
+        self.stage = Stage(self.stage_current)
 
-            for obj in teleporter_objects:
-                collided = obj.check_collision(player)
-                if collided:
-                    pygame.draw.rect(screen, black, obj.rect)
-                    screen.blit(player.img, player.coordinates)
-                    updates.append(obj.rect[:])
-                    screen.blit(obj.img, obj.coordinates)
+        self.player = Player()
+        self.player.move_force(self.stage.playerspawn)
 
 
-            pygame.display.update(updates)
+    def event_loop(self):
+        for event in pg.event.get():
+            self.keys = pg.key.get_pressed()
+            if event.type == pg.QUIT:
+                self.done = True
+
+    def update(self):
+        pass
+
+    def draw(self):
+        self.sf_screen.fill(config['color_backgroud'])
+
+        self.stage.draw(self.sf_screen)
+        self.player.draw(self.sf_screen)
+
+        self.sf_window.blit(pg.transform.scale(self.sf_screen, self.sf_window.get_size()), (0, 0))
+
+    def display_fps(self):
+        caption = "{} - FPS: {:.2f}".format(config['window_caption'], self.clock.get_fps())
+        pg.display.set_caption(caption)
+
+    def main_loop(self):
+        while not self.done:
+            self.event_loop()
+            self.update()
+            self.draw()
+            pg.display.update()
+            self.clock.tick(self.framerate)
+            self.display_fps()
+
+def start():
+    os.environ['SDL_VIDEO_CENTERED'] = '1'
+    pg.mixer.pre_init(22050, -16, 2, 512)
+    pg.init()
+    pg.mixer.set_num_channels(64)
+    pg.font.init()
+
+    pg.display.set_caption(config['window_caption'])
+    pg.display.set_icon(pg.image.load("./sprites/icon.jpg"))
+    pg.display.set_mode((config['window_width'], config['window_height']), 0, 32)
+
+    intro = Game_intro()
+    next = intro.main_loop()
+
+    if next in ['start']:
+        game = Game_logic()
+        game.main_loop()
+    elif next in ['continue']:
+        game = Game_logic(newgame=False)
+        game.main_loop()
+
+    pg.quit()
+    sys.exit()
+
+if __name__ == '__main__':
+    start()
