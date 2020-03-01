@@ -13,12 +13,11 @@ Sprites
     # Name from source: Sara and Star
     # Artist: Mandi Paugh
 """
-
 import os
 import sys
+import time
 import pygame as pg
 import yaml
-
 
 config = {
      'window_width': 1280
@@ -27,19 +26,12 @@ config = {
     ,'screen_height': 720
     ,'framerate': 60.0
     ,'window_caption': 'Puzzle Game'
-    ,'color_backgroud': (24, 20, 37, 1)
+    ,'color_backgroud': (0, 0, 0, 1)
     ,'intro_backImg': 'background.jpg'
-    ,'intro_backcolor': (56, 142, 142)
-    ,'intro_buttontextcolor': (0, 0, 0)
-    ,'intro_startcolor_ic': (0, 200, 0)
-    ,'intro_startcolor_ac': (0, 255, 0)
-    ,'intro_continuecolor_ic': (0, 0, 100)
-    ,'intro_continuecolor_ac': (0, 0, 255)
-    ,'intro_quitcolor_ic': (200, 0, 0)
-    ,'intro_quitcolor_ac': (255, 0, 0)
     ,'game_characterpath': "./characters/"
     ,'game_spritepath': "./sprites/"
     ,'game_tilesize': 24
+    ,'gameover_backImg': "GameOver.jpg"
 }
 
 class Game_intro:
@@ -52,9 +44,9 @@ class Game_intro:
         self.keys = pg.key.get_pressed()
 
         self.backImg = pg.image.load(config['intro_backImg'])
-        self.button_start = self.Button("Start", 600, 450, 100, 50, config['intro_startcolor_ic'], config['intro_startcolor_ac'])
-        self.button_continue = self.Button("Continue", 600, 550, 100, 50, config['intro_continuecolor_ic'], config['intro_continuecolor_ac'])
-        self.button_quit = self.Button("Quit", 600, 650, 100, 50, config['intro_quitcolor_ic'], config['intro_quitcolor_ac'])
+        self.button_start = self.Button("Start", 600, 450, 100, 50, (0, 200, 0), (0, 255, 0))
+        self.button_continue = self.Button("Continue", 600, 550, 100, 50, (0, 0, 100), (0, 0, 255))
+        self.button_quit = self.Button("Quit", 600, 650, 100, 50, (200, 0, 0), (255, 0, 0))
 
         self.result = ""
 
@@ -71,7 +63,7 @@ class Game_intro:
             self.color = self.color_inactive
             self.msg = msg
             self.font = pg.font.SysFont("comicsansms", 20)
-            self.textcolor = config['intro_buttontextcolor']
+            self.textcolor = (0, 0, 0)
 
         def get_event(self, event):
             self.mouse_pos = pg.mouse.get_pos()
@@ -118,7 +110,7 @@ class Game_intro:
 
 
     def draw(self):
-        self.sf_screen.fill(config['intro_backcolor'])
+        self.sf_screen.fill((56, 142, 142))
         self.sf_screen.blit(self.backImg, (0, 0))
         self.button_start.draw(self.sf_screen)
         self.button_continue.draw(self.sf_screen)
@@ -140,31 +132,167 @@ class Game_intro:
             self.display_fps()
         return self.result
 
+class Game_over:
+    def __init__(self):
+        self.sf_window = pg.display.get_surface()
+        self.sf_screen = pg.Surface((config['screen_width'], config['screen_height']))
+        self.done = False
+        self.clock = pg.time.Clock()
+        self.framerate = config['framerate']
+        self.keys = pg.key.get_pressed()
+
+        self.backImg = pg.image.load(config['gameover_backImg'])
+
+    def event_loop(self):
+        for event in pg.event.get():
+            self.keys = pg.key.get_pressed()
+            if event.type == pg.QUIT or self.keys[pg.K_ESCAPE] or self.keys[pg.K_q]:
+                self.done = True
+
+    def draw(self):
+        self.sf_screen.fill((56, 142, 142))
+        self.sf_screen.blit(self.backImg, (0, 0))
+
+        self.sf_window.blit(pg.transform.scale(self.sf_screen, self.sf_window.get_size()), (0, 0))
+
+    def display_fps(self):
+        caption = "{} - FPS: {:.2f}".format(config['window_caption'], self.clock.get_fps())
+        pg.display.set_caption(caption)
+
+    def main_loop(self):
+        while not self.done:
+            self.event_loop()
+            self.draw()
+            pg.display.update()
+            self.clock.tick(self.framerate)
+            self.display_fps()
+
 class Player:
     def __init__(self):
         self.img_jill = pg.image.load(config['game_characterpath'] + "Jill/Right.gif").convert()
         self.img_jack = pg.image.load(config['game_characterpath'] + "Jack/Right.gif").convert()
         self.img = self.img_jill
+        self.img_changed = False
         self.rect = self.img.get_rect()
+
+        self.current_collision_type = {'top': False, 'bottom': False, 'right': False, 'left': False}
+
         self.moving_left = False
         self.moving_right = False
+        self.moving_speed = 4
+
         self.moving_jumping = False
+        self.jump_speed = -7
+        self.vertical_momentum = 0
+        self.air_timer = 0
+
         self.facing_left = False
-        self.carrying = False
+
+        self.jump_sound = pg.mixer.Sound('./sounds/jump.wav')
+        self.jump_sound.set_volume(0.3)
+
+        # self.carrying = False
         # self.telported = False
 
-    def move_force(self, location):
+    def teleport(self, location):
         self.rect.x = location[0]
         self.rect.y = location[1]
 
-    def event_loop(self):
-        pass
+    def switch_char(self):
+        if self.img == self.img_jill:
+            self.img = self.img_jack
+        elif self.img == self.img_jack:
+            self.img = self.img_jill
 
-    def update(self):
-        pass
+    def get_event(self, event):
+        self.get_event_always(event)
+        if event.type == pg.KEYDOWN:
+            if event.key in [pg.K_c]:
+                if not self.img_changed:
+                    self.switch_char()
+                self.img_changed = True
+
+    def get_event_always(self, event):
+        if event.type == pg.KEYDOWN:
+            if event.key in [pg.K_LEFT, pg.K_a]:
+                self.moving_left = True
+            if event.key in [pg.K_RIGHT, pg.K_d]:
+                self.moving_right = True
+            if event.key in [pg.K_UP, pg.K_j, pg.K_w]:
+                self.moving_jumping = True
+
+        if event.type == pg.KEYUP:
+            if event.key in [pg.K_LEFT, pg.K_a]:
+                self.moving_left = False
+            if event.key in [pg.K_RIGHT, pg.K_d]:
+                self.moving_right = False
+            if event.key in [pg.K_UP, pg.K_j, pg.K_w]:
+                self.moving_jumping = False
+
+        if event.type == pg.KEYUP:
+            if event.key in [pg.K_c]:
+                self.img_changed = False
+
+    def update(self, tiles):
+        movement = [0, 0]
+        if self.moving_left:
+            movement[0] -= self.moving_speed
+        if self.moving_right:
+            movement[0] += self.moving_speed
+
+        if movement[0] > 0:
+            self.facing_left = False
+        if movement[0] < 0:
+            self.facing_left = True
+
+        if self.moving_jumping and self.air_timer < 6 and self.current_collision_type['bottom']:
+            self.jump_sound.play()
+            self.vertical_momentum = self.jump_speed
+        elif not self.moving_jumping and self.air_timer > 6 and self.vertical_momentum < 0:
+            self.vertical_momentum = 0
+
+        movement[1] += self.vertical_momentum
+        self.vertical_momentum += 0.3
+
+        self.rect, self.current_collision_type = self.move(self.rect, movement, tiles)
+
+        if self.current_collision_type['bottom']:
+            self.air_timer = 0
+            self.vertical_momentum = 0
+        else:
+            self.air_timer += 1
+
+    def collision_test(self, rect, tiles): # Public Domain by DaFluffyPotato
+        hit_list = []
+        for key in tiles:
+            if rect.colliderect(tiles[key].rect):
+                hit_list.append(tiles[key].rect)
+        return hit_list
+
+    def move(self, rect, movement, tiles): # Public Domain by DaFluffyPotato
+        collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
+        rect.x += movement[0]
+        hit_list = self.collision_test(rect, tiles)
+        for tile in hit_list:
+            if movement[0] > 0:
+                rect.right = tile.left
+                collision_types['right'] = True
+            elif movement[0] < 0:
+                rect.left = tile.right
+                collision_types['left'] = True
+        rect.y += movement[1]
+        hit_list = self.collision_test(rect, tiles)
+        for tile in hit_list:
+            if movement[1] > 0:
+                rect.bottom = tile.top
+                collision_types['bottom'] = True
+            elif movement[1] < 0:
+                rect.top = tile.bottom
+                collision_types['top'] = True
+        return rect, collision_types
 
     def draw(self,screen):
-        screen.blit(self.img, (self.rect.x, self.rect.y))
+        screen.blit(pg.transform.flip(self.img, self.facing_left, False), (self.rect.x, self.rect.y))
 
 class Tile:
     def __init__(self, type, unscaled_x, unscaled_y):
@@ -174,11 +302,54 @@ class Tile:
         self.rect.x = unscaled_x * config['game_tilesize']
         self.rect.y = unscaled_y * config['game_tilesize']
 
-    # def event_loop(self):
-    #     pass
-
     def update(self):
         pass
+
+    def draw(self, screen):
+        screen.blit(self.img, (self.rect.x, self.rect.y))
+
+class Helpbox:
+    def __init__(self, text, unscaled_x, unscaled_y):
+        self.type = 'helpbox'
+        self.img = pg.image.load(config['game_spritepath'] + self.type + '.png').convert()
+        self.rect = self.img.get_rect()
+        self.rect.x = unscaled_x * config['game_tilesize']
+        self.rect.y = unscaled_y * config['game_tilesize']
+        self.activate = False
+
+        self.text = text
+        self.font = pg.font.SysFont('freesansbold.ttf', 32)
+        self.textcolor = (255, 0, 0)
+        self.textlocation = (round(config['screen_width'] / 2), config['screen_height'] - 24)
+
+    def update(self, player):
+        if self.rect.colliderect(player.rect):
+            self.activate = True
+        else:
+            self.activate = False
+
+    def draw(self, screen):
+        screen.blit(self.img, (self.rect.x, self.rect.y))
+        # screen.blit(pg.transform.flip(self.img, self.activate, False), (self.rect.x, self.rect.y))
+        if self.activate:
+            textobj = self.font.render(self.text, 1, self.textcolor)
+            textrect = textobj.get_rect()
+            textrect.center = self.textlocation
+            screen.blit(textobj, textrect)
+
+class Goal:
+    def __init__(self, unscaled_x, unscaled_y):
+        self.type = 'goal'
+        self.img = pg.image.load(config['game_spritepath'] + self.type + '.png').convert()
+        self.rect = self.img.get_rect()
+        self.rect.x = unscaled_x * config['game_tilesize']
+        self.rect.y = unscaled_y * config['game_tilesize']
+
+    def update(self, player):
+        if self.rect.collidepoint(player.rect.center):
+            return True
+        else:
+            return False
 
     def draw(self, screen):
         screen.blit(self.img, (self.rect.x, self.rect.y))
@@ -186,20 +357,38 @@ class Tile:
 class Stage:
     def __init__(self, levelname):
         self.stage_data = self.load_stagedata(levelname)
+
         self.level_name = self.stage_data['level_name']
         self.level_next = self.stage_data['next_level_name']
-
         self.playerspawn = (self.stage_data['player_spawn']['x'], self.stage_data['player_spawn']['y'])
-        self.map_data = self.stage_data['map_data']
+        self.map_tiles = self.stage_data['map_data_impassable']
+        self.map_helpbox = self.stage_data['map_data_helpbox']
+        self.map_goal = self.stage_data['map_data_goal']
+
+        self.stage_finished = False
+
+        self.time_font = pg.font.Font('freesansbold.ttf', 32)
+        self.time_color = (0, 255, 0)
+        self.time_location = (10, config['screen_height'] - 40)
+        self.time_start = time.time()
+        self.time_elap = 0
+
+        self.name_font = pg.font.Font('freesansbold.ttf', 32)
+        self.name_color = (0, 255, 0)
+        self.name_location = (config['screen_width'] - 10, config['screen_height'] - 40)
 
 
     def load_stagedata(self, filename):
-        path = './levels/' + filename + '.lvl'
-        with open(path) as f:
-            stage_data = yaml.safe_load(f)
+        try:
+            path = './levels/' + filename + '.lvl'
+            with open(path, 'r') as f:
+                stage_data = yaml.safe_load(f)
+        except FileNotFoundError as e:
+            raise FileNotFoundError()
 
         map_legend = stage_data['map_legend']
-        # map_links = stage_data['map_links']
+        map_links = stage_data['map_links']
+
         map_data_raw = stage_data['map_data_raw'].split('\n')
         map_data_list = list()
         for row in map_data_raw:
@@ -209,25 +398,65 @@ class Stage:
                 data.append(int(tile))
             map_data_list.append(data)
 
-        map_data = dict()
+        map_data_impassable = dict()
+        map_data_helpbox = dict()
+        map_data_goal = dict()
         for y in range(len(map_data_list)):
             for x in range(len(map_data_list[y])):
-                type = map_legend[map_data_list[y][x]]['type']
+                currenttile = map_legend[map_data_list[y][x]]
+                type = currenttile['type']
                 # print(type)
-                if type in ['wall', 'floor', 'goal', 'helpbox']:
-                    map_data[str(x) + ';' + str(y)] = Tile(type, x, y)
-        stage_data['map_data']= map_data
+                if type in ['empty']:
+                    pass
+                elif type in ['helpbox']:
+                    map_data_helpbox[str(x) + ';' + str(y)] = Helpbox(map_links[currenttile['link']]['text'], x, y)
+                elif type in ['goal']:
+                    map_data_goal[str(x) + ';' + str(y)] = Goal(x, y)
+                else:
+                    map_data_impassable[str(x) + ';' + str(y)] = Tile(type, x, y)
+
+        stage_data['map_data_impassable']= map_data_impassable
+        stage_data['map_data_helpbox'] = map_data_helpbox
+        stage_data['map_data_goal'] = map_data_goal
         return stage_data
 
-    # def event_loop(self):
-    #     pass
+    def update(self, player):
+        for tile in self.map_helpbox:
+            self.map_helpbox[tile].update(player)
+        for tile in self.map_goal:
+            if self.map_goal[tile].update(player):
+                self.stage_finished = True
+        self.time_elap += time.time() - self.time_start
+        self.time_start = time.time()
 
-    def update(self):
-        pass
+        return self.stage_finished
+
+    def update_pause(self):
+        self.time_start = time.time()
 
     def draw(self, screen):
-        for tile in self.map_data:
-            self.map_data[tile].draw(screen)
+        for tile in self.map_tiles:
+            self.map_tiles[tile].draw(screen)
+        for tile in self.map_helpbox:
+            self.map_helpbox[tile].draw(screen)
+        for tile in self.map_goal:
+            self.map_goal[tile].draw(screen)
+
+        if self.time_elap < 60:
+            time_str = time.strftime("Time: %Ss", time.gmtime(self.time_elap))
+        else:
+            time_str = time.strftime("Time: %Mm %Ss", time.gmtime(self.time_elap))
+        textobj = self.time_font.render(time_str, 1, self.time_color)
+        textrect = textobj.get_rect()
+        textrect.left = self.time_location[0]
+        textrect.y = self.time_location[1]
+        screen.blit(textobj, textrect)
+
+        textobj = self.time_font.render("Level: " + self.level_name, 1, self.name_color)
+        textrect = textobj.get_rect()
+        textrect.right = self.name_location[0]
+        textrect.y = self.name_location[1]
+        screen.blit(textobj, textrect)
 
 class Game_logic:
 
@@ -240,30 +469,100 @@ class Game_logic:
         self.framerate = config['framerate']
         self.keys = pg.key.get_pressed()
 
+        self.music_bg = pg.mixer.music.load('./sounds/BGM.wav')
+        pg.mixer.music.play(-1)
+        pg.mixer.music.set_volume(0.4)
+
         if newgame:
             self.stage_current = "level1"
         else:
-            self.stage_current = "level1" # TODO in future load save
+            self.stage_current = "level1" # TODO in future load save function
         self.stage = Stage(self.stage_current)
 
         self.player = Player()
-        self.player.move_force(self.stage.playerspawn)
+        self.player.teleport(self.stage.playerspawn)
 
+        self.stage_resetted = False
+        self.stage_finished = False
+
+        self.paused_pressed = False
+        self.paused = False
+        self.pause_font_color = (255, 255, 255)
+        self.paused_font_1 = pg.font.Font('freesansbold.ttf', 50)
+        self.pause_location_1 = (config['screen_width']/2, config['screen_height']/3)
+
+        self.paused_font_2 = pg.font.Font('freesansbold.ttf', 30)
+        self.pause_location_2 = (config['screen_width']/2, config['screen_height']/2)
+
+
+    def reset_stage(self):
+        self.stage = Stage(self.stage_current)
+
+        self.player = Player()
+        self.player.teleport(self.stage.playerspawn)
 
     def event_loop(self):
         for event in pg.event.get():
             self.keys = pg.key.get_pressed()
             if event.type == pg.QUIT:
                 self.done = True
+            if event.type == pg.KEYUP:
+                if event.key in [pg.K_ESCAPE, pg.K_c]:
+                    self.paused_pressed = False
+            if self.paused:
+                if event.type == pg.KEYDOWN:
+                    if event.key in [pg.K_ESCAPE, pg.K_c]:
+                        if not self.paused_pressed:
+                            self.paused = not self.paused
+                        self.paused_pressed = True
+                    if event.key in [pg.K_q]:
+                        self.done = True
+                self.player.get_event_always(event)
+            else:
+                if event.type == pg.KEYDOWN:
+                    if event.key == pg.K_r:
+                        if not self.stage_resetted:
+                            self.reset_stage()
+                        self.stage_resetted = True
+                    if event.key == pg.K_ESCAPE:
+                        if not self.paused_pressed:
+                            self.paused = not self.paused
+                        self.paused_pressed = True
+                if event.type == pg.KEYUP:
+                    if event.key == pg.K_r:
+                        self.stage_resetted = False
+                self.player.get_event(event)
 
     def update(self):
-        pass
+        if not self.paused:
+            self.player.update(self.stage.map_tiles)
+            self.stage_finished = self.stage.update(self.player)
+        else:
+            self.stage.update_pause()
+        if self.stage_finished:
+            self.stage_current = self.stage.level_next
+        if self.stage_current == "GAMEOVER":
+            self.done = True
 
     def draw(self):
         self.sf_screen.fill(config['color_backgroud'])
 
         self.stage.draw(self.sf_screen)
         self.player.draw(self.sf_screen)
+
+        if self.paused:
+            pg.draw.rect(self.sf_screen, (102, 102, 102), (440, 200, 400, 80))
+            textobj = self.paused_font_1.render("Game Paused!", 1, self.pause_font_color)
+            textrect = textobj.get_rect()
+            textrect.center = self.pause_location_1
+            self.sf_screen.blit(textobj, textrect)
+
+            pg.draw.rect(self.sf_screen, (102, 102, 102), (340, 320, 590, 70))
+            textobj = self.paused_font_2.render("Press 'C' to Continue or 'Q' to Quit", 1, self.pause_font_color)
+            textrect = textobj.get_rect()
+            textrect.center = self.pause_location_2
+            self.sf_screen.blit(textobj, textrect)
+
 
         self.sf_window.blit(pg.transform.scale(self.sf_screen, self.sf_window.get_size()), (0, 0))
 
@@ -300,6 +599,9 @@ def start():
     elif next in ['continue']:
         game = Game_logic(newgame=False)
         game.main_loop()
+
+    gameover = Game_over()
+    gameover.main_loop()
 
     pg.quit()
     sys.exit()
