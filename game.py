@@ -16,6 +16,7 @@ Sprites
 import os
 import sys
 import time
+from pathlib import Path
 import pygame as pg
 import yaml
 
@@ -92,7 +93,8 @@ class Game_intro:
         for event in pg.event.get():
             self.keys = pg.key.get_pressed()
             if event.type == pg.QUIT or self.keys[pg.K_ESCAPE]:
-                self.done = True
+                pg.quit()
+                sys.exit()
             self.button_start.get_event(event)
             self.button_continue.get_event(event)
             self.button_quit.get_event(event)
@@ -107,7 +109,6 @@ class Game_intro:
         if self.button_quit.update():
             self.result = "quit"
             self.done = True
-
 
     def draw(self):
         self.sf_screen.fill((56, 142, 142))
@@ -251,6 +252,9 @@ class Player:
         elif not self.moving_jumping and self.air_timer > 6 and self.vertical_momentum < 0:
             self.vertical_momentum = 0
 
+        if self.current_collision_type['top'] and self.vertical_momentum < 0:
+            self.vertical_momentum = 0
+
         movement[1] += self.vertical_momentum
         self.vertical_momentum += 0.3
 
@@ -295,26 +299,22 @@ class Player:
         screen.blit(pg.transform.flip(self.img, self.facing_left, False), (self.rect.x, self.rect.y))
 
 class Tile:
-    def __init__(self, type, unscaled_x, unscaled_y):
+    def __init__(self, unscaled_x, unscaled_y, type):
         self.type = type
         self.img = pg.image.load(config['game_spritepath'] + self.type + '.png').convert()
         self.rect = self.img.get_rect()
         self.rect.x = unscaled_x * config['game_tilesize']
         self.rect.y = unscaled_y * config['game_tilesize']
 
-    def update(self):
+    def update(self, player):
         pass
 
     def draw(self, screen):
         screen.blit(self.img, (self.rect.x, self.rect.y))
 
-class Helpbox:
-    def __init__(self, text, unscaled_x, unscaled_y):
-        self.type = 'helpbox'
-        self.img = pg.image.load(config['game_spritepath'] + self.type + '.png').convert()
-        self.rect = self.img.get_rect()
-        self.rect.x = unscaled_x * config['game_tilesize']
-        self.rect.y = unscaled_y * config['game_tilesize']
+class Helpbox(Tile):
+    def __init__(self, unscaled_x, unscaled_y, text):
+        super(Helpbox, self).__init__(unscaled_x, unscaled_y, 'helpbox')
         self.activate = False
 
         self.text = text
@@ -337,13 +337,82 @@ class Helpbox:
             textrect.center = self.textlocation
             screen.blit(textobj, textrect)
 
-class Goal:
+class Movebox(Tile):
     def __init__(self, unscaled_x, unscaled_y):
-        self.type = 'goal'
-        self.img = pg.image.load(config['game_spritepath'] + self.type + '.png').convert()
-        self.rect = self.img.get_rect()
-        self.rect.x = unscaled_x * config['game_tilesize']
-        self.rect.y = unscaled_y * config['game_tilesize']
+        super(Movebox, self).__init__(unscaled_x, unscaled_y, 'movebox')
+
+    # def update(self):
+    #     pass
+    #
+    # def draw(self, screen):
+    #     screen.blit(self.img, (self.rect.x, self.rect.y))
+
+class Redswitch(Tile):
+    def __init__(self, unscaled_x, unscaled_y):
+        super(Redswitch, self).__init__(unscaled_x, unscaled_y, 'redswitch')
+        self.img_red = pg.image.load(config['game_spritepath'] + 'redswitch' + '.png').convert()
+        self.img_green = pg.image.load(config['game_spritepath'] + 'greenswitch' + '.png').convert()
+        self.img = self.img_red
+        self.activated = False
+
+    def toggle(self):
+        if self.img == self.img_red:
+            self.img = self.img_green
+            self.activated = True
+        else:
+            self.img = self.img_red
+            self.activated = False
+
+    def update(self, player, map_logic, map_logic_table):
+        if self.rect.colliderect(player.rect) and not self.activated:
+            self.toggle()
+
+
+    def draw(self, screen):
+        screen.blit(self.img, (self.rect.x, self.rect.y))
+
+
+class Barrier(Tile):
+    def __init__(self, unscaled_x, unscaled_y, link):
+        super(Barrier, self).__init__(unscaled_x, unscaled_y, 'ClosedBarrier')
+        self.links = link
+        self.img_closed = pg.image.load(config['game_spritepath'] + 'OpenBarrier' + '.png').convert()
+        self.img_open = pg.image.load(config['game_spritepath'] + 'ClosedBarrier' + '.png').convert()
+        self.img = self.img_closed
+        self.activated = False
+
+    def open(self):
+        self.img = self.img_open
+        self.activated = True
+
+    def close(self):
+        self.img = self.img_closed
+        self.activated = False
+
+    def update(self, player, map_logic, map_logic_table):
+        self.activated = False
+        for link in self.links:
+            if map_logic[map_logic_table[link]].activated:
+                self.activated = True
+        if self.activated:
+            self.open()
+        else:
+            self.close()
+    # def draw(self, screen):
+    #     screen.blit(self.img, (self.rect.x, self.rect.y))
+
+class Plate(Tile):
+    def __init__(self, unscaled_x, unscaled_y):
+        super(Plate, self).__init__(unscaled_x, unscaled_y, 'plateup')
+    def update(self, player, map_logic, map_logic_table):
+        pass
+    #
+    # def draw(self, screen):
+    #     screen.blit(self.img, (self.rect.x, self.rect.y))
+
+class Goal(Tile):
+    def __init__(self, unscaled_x, unscaled_y):
+        super(Goal, self).__init__(unscaled_x, unscaled_y, 'goal')
 
     def update(self, player):
         if self.rect.collidepoint(player.rect.center):
@@ -358,12 +427,16 @@ class Stage:
     def __init__(self, levelname):
         self.stage_data = self.load_stagedata(levelname)
 
-        self.level_name = self.stage_data['level_name']
+        self.level_title = self.stage_data['level_name']
+        self.level_name = levelname
         self.level_next = self.stage_data['next_level_name']
         self.playerspawn = (self.stage_data['player_spawn']['x'], self.stage_data['player_spawn']['y'])
         self.map_tiles = self.stage_data['map_data_impassable']
         self.map_helpbox = self.stage_data['map_data_helpbox']
         self.map_goal = self.stage_data['map_data_goal']
+        self.map_movebox = self.stage_data['map_data_box']
+        self.map_logic = self.stage_data['map_data_logic']
+        self.map_logic_table = self.stage_data['map_data_logic_table']
 
         self.stage_finished = False
 
@@ -377,17 +450,15 @@ class Stage:
         self.name_color = (0, 255, 0)
         self.name_location = (config['screen_width'] - 10, config['screen_height'] - 40)
 
-
     def load_stagedata(self, filename):
         try:
             path = './levels/' + filename + '.lvl'
             with open(path, 'r') as f:
                 stage_data = yaml.safe_load(f)
         except FileNotFoundError as e:
-            raise FileNotFoundError()
+            raise FileNotFoundError(filename)
 
         map_legend = stage_data['map_legend']
-        map_links = stage_data['map_links']
 
         map_data_raw = stage_data['map_data_raw'].split('\n')
         map_data_list = list()
@@ -401,28 +472,49 @@ class Stage:
         map_data_impassable = dict()
         map_data_helpbox = dict()
         map_data_goal = dict()
+        map_data_box = dict()
+        map_data_logic = dict()
+        map_data_logic_table = dict()
         for y in range(len(map_data_list)):
             for x in range(len(map_data_list[y])):
-                currenttile = map_legend[map_data_list[y][x]]
-                type = currenttile['type']
-                # print(type)
+                current_id = map_data_list[y][x]
+                current_legendentry = map_legend[current_id]
+                type = current_legendentry['type']
                 if type in ['empty']:
                     pass
                 elif type in ['helpbox']:
-                    map_data_helpbox[str(x) + ';' + str(y)] = Helpbox(map_links[currenttile['link']]['text'], x, y)
+                    map_data_helpbox[str(x) + ';' + str(y)] = Helpbox(x, y, current_legendentry['text'])
                 elif type in ['goal']:
                     map_data_goal[str(x) + ';' + str(y)] = Goal(x, y)
+                elif type in ['movebox']:
+                    map_data_box[str(x) + ';' + str(y)] = Movebox(x, y)
+                elif type in ['redswitch']:
+                    map_data_logic[str(x) + ';' + str(y)] = Redswitch(x, y)
+                    map_data_logic_table[current_id] = str(x) + ';' + str(y)
+                elif type in ['ClosedBarrier']:
+                    map_data_logic[str(x) + ';' + str(y)] = Barrier(x, y, current_legendentry['link'])
+                    map_data_logic_table[current_id] = str(x) + ';' + str(y)
+                elif type in ['plateup']:
+                    map_data_logic[str(x) + ';' + str(y)] = Plate(x, y)
+                    map_data_logic_table[current_id] = str(x) + ';' + str(y)
                 else:
-                    map_data_impassable[str(x) + ';' + str(y)] = Tile(type, x, y)
+                    map_data_impassable[str(x) + ';' + str(y)] = Tile(x, y, type)
 
         stage_data['map_data_impassable']= map_data_impassable
         stage_data['map_data_helpbox'] = map_data_helpbox
         stage_data['map_data_goal'] = map_data_goal
+        stage_data['map_data_box'] = map_data_box
+        stage_data['map_data_logic'] = map_data_logic
+        stage_data['map_data_logic_table'] = map_data_logic_table
         return stage_data
 
     def update(self, player):
         for tile in self.map_helpbox:
             self.map_helpbox[tile].update(player)
+        for tile in self.map_movebox:
+            self.map_movebox[tile].update(player)
+        for tile in self.map_logic:
+            self.map_logic[tile].update(player, self.map_logic, self.map_logic_table)
         for tile in self.map_goal:
             if self.map_goal[tile].update(player):
                 self.stage_finished = True
@@ -441,6 +533,10 @@ class Stage:
             self.map_helpbox[tile].draw(screen)
         for tile in self.map_goal:
             self.map_goal[tile].draw(screen)
+        for tile in self.map_movebox:
+            self.map_movebox[tile].draw(screen)
+        for tile in self.map_logic:
+            self.map_logic[tile].draw(screen)
 
         if self.time_elap < 60:
             time_str = time.strftime("Time: %Ss", time.gmtime(self.time_elap))
@@ -452,7 +548,7 @@ class Stage:
         textrect.y = self.time_location[1]
         screen.blit(textobj, textrect)
 
-        textobj = self.time_font.render("Level: " + self.level_name, 1, self.name_color)
+        textobj = self.time_font.render("Level: " + self.level_title, 1, self.name_color)
         textrect = textobj.get_rect()
         textrect.right = self.name_location[0]
         textrect.y = self.name_location[1]
@@ -469,14 +565,14 @@ class Game_logic:
         self.framerate = config['framerate']
         self.keys = pg.key.get_pressed()
 
-        self.music_bg = pg.mixer.music.load('./sounds/BGM.wav')
-        pg.mixer.music.play(-1)
-        pg.mixer.music.set_volume(0.4)
+        # self.music_bg = pg.mixer.music.load('./sounds/BGM.wav')
+        # pg.mixer.music.play(-1)
+        # pg.mixer.music.set_volume(0.4)
 
         if newgame:
             self.stage_current = "level1"
         else:
-            self.stage_current = "level1" # TODO in future load save function
+            self.stage_current = self.loadsavefile()
         self.stage = Stage(self.stage_current)
 
         self.player = Player()
@@ -490,25 +586,59 @@ class Game_logic:
         self.pause_font_color = (255, 255, 255)
         self.paused_font_1 = pg.font.Font('freesansbold.ttf', 50)
         self.pause_location_1 = (config['screen_width']/2, config['screen_height']/3)
-
         self.paused_font_2 = pg.font.Font('freesansbold.ttf', 30)
         self.pause_location_2 = (config['screen_width']/2, config['screen_height']/2)
 
+        self.saving_game = False
 
     def reset_stage(self):
+        oldtimer = self.stage.time_elap
         self.stage = Stage(self.stage_current)
 
+        self.stage.time_elap += oldtimer
         self.player = Player()
         self.player.teleport(self.stage.playerspawn)
+
+    def loadsavefile(self):
+        try:
+            path = 'save.box'
+            with open(path, 'r') as f:
+                save = yaml.safe_load(f)
+            return save['savedlevel']
+        except FileNotFoundError as e:
+            print('Error: No save file found. Starting new game')
+            return 'level1'
+
+    def savegame(self):
+        savedlevel = self.stage.level_name
+        saveboxfile = Path("save.box")
+        if saveboxfile.is_file(): # save.box exist
+            try:
+                with open(saveboxfile, 'r') as f:
+                    save = yaml.safe_load(f)
+                save['savedlevel'] = savedlevel
+            except TypeError:
+                save = dict(savedlevel=savedlevel)
+            with open(saveboxfile, 'w') as outfile:
+                yaml.dump(save, outfile, default_flow_style=False)
+        else: # save.box doesnot exist. create it
+            data = dict(savedlevel=savedlevel)
+            with open(saveboxfile, 'w') as outfile:
+                yaml.dump(data, outfile, default_flow_style=False)
 
     def event_loop(self):
         for event in pg.event.get():
             self.keys = pg.key.get_pressed()
             if event.type == pg.QUIT:
-                self.done = True
+                pg.quit()
+                sys.exit()
+            if event.type == pg.KEYDOWN:
+                pass
             if event.type == pg.KEYUP:
                 if event.key in [pg.K_ESCAPE, pg.K_c]:
                     self.paused_pressed = False
+                if event.key in [pg.K_s]:
+                    self.saving_game = False
             if self.paused:
                 if event.type == pg.KEYDOWN:
                     if event.key in [pg.K_ESCAPE, pg.K_c]:
@@ -516,7 +646,12 @@ class Game_logic:
                             self.paused = not self.paused
                         self.paused_pressed = True
                     if event.key in [pg.K_q]:
-                        self.done = True
+                        pg.quit()
+                        sys.exit()
+                    if event.key in [pg.K_s]:
+                        if not self.saving_game:
+                            self.savegame()
+                        self.saving_game = True
                 self.player.get_event_always(event)
             else:
                 if event.type == pg.KEYDOWN:
@@ -539,10 +674,15 @@ class Game_logic:
             self.stage_finished = self.stage.update(self.player)
         else:
             self.stage.update_pause()
+
         if self.stage_finished:
             self.stage_current = self.stage.level_next
+
         if self.stage_current == "GAMEOVER":
             self.done = True
+        elif self.stage_finished:
+            self.stage_finished = False
+            self.reset_stage()
 
     def draw(self):
         self.sf_screen.fill(config['color_backgroud'])
@@ -551,16 +691,18 @@ class Game_logic:
         self.player.draw(self.sf_screen)
 
         if self.paused:
-            pg.draw.rect(self.sf_screen, (102, 102, 102), (440, 200, 400, 80))
+
             textobj = self.paused_font_1.render("Game Paused!", 1, self.pause_font_color)
             textrect = textobj.get_rect()
             textrect.center = self.pause_location_1
+            pg.draw.rect(self.sf_screen, (102, 102, 102), textrect.inflate(20, 20))
             self.sf_screen.blit(textobj, textrect)
 
-            pg.draw.rect(self.sf_screen, (102, 102, 102), (340, 320, 590, 70))
-            textobj = self.paused_font_2.render("Press 'C' to Continue or 'Q' to Quit", 1, self.pause_font_color)
+
+            textobj = self.paused_font_2.render("Press 'C' to Continue, 'S' to save, or 'Q' to Quit", 1, self.pause_font_color)
             textrect = textobj.get_rect()
             textrect.center = self.pause_location_2
+            pg.draw.rect(self.sf_screen, (102, 102, 102), textrect.inflate(20, 20))
             self.sf_screen.blit(textobj, textrect)
 
 

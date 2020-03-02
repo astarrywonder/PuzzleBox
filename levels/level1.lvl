@@ -1,5 +1,5 @@
 level_name: "Tutorial 1"
-next_level_name: "GAMEOVER"
+next_level_name: "level2"
 player_spawn:
   x: 48
   y: 540
@@ -14,19 +14,12 @@ map_legend:
     type: goal
   04:
     type: helpbox
-    link: 01
+    text: "<<Press A and D to move Left and Right>>"
   05:
     type: helpbox
-    link: 02
+    text: "<<Press J to Jump>>"
   06:
     type: helpbox
-    link: 03
-map_links:
-  01:
-    text: "<<Press A and D to move Left and Right>>"
-  02:
-    text: "<<Press J to Jump>>"
-  03:
     text: "<<Reach the door to complete the level>>"
 map_data_raw: |
   01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 01
