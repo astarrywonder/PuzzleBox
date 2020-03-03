@@ -4,10 +4,11 @@ Basic Design Philosophy: A puzzle game where little to no information about the 
 
 Used libraries:
 Pygame
+PyYaml
 
 Player Mechanics: Player will have left/right movement, the ability to jump, and the ability to interact with and carry/throw objects.
 
-Proposed Control Scheme: A/D:Left/Right J:Jump K:Interact S:Save
+Control Scheme: A/D:Left/Right J:Jump K:Interact S:Save
 
 List of current interactive objects:
 
@@ -25,11 +26,12 @@ List of current interactive objects:
 
 7: Level saving (can save on any level by pressing the S key, can load from the title screen)
 
+
 List of currently planned objects:
 
 1: Levers (Player interaction switches it on/off)
 
-6: Moving Platforms
+2: Moving Platforms
 
 3: Colored Barriers (Red, Green, Blue) (Does not block player movement, but prevents boxes other than the specified color from passing through.
 
@@ -48,4 +50,3 @@ Work separation:
 Artir Hyseni: title screen graphics, title screen setup, title/game transition, font rendering.
 Raymond Chen: lead designer, graphic acquisition, gravity/fall mechanics, collision mechanics, game framework, music acquisition, art acquisition.
 Gregory Terrell: floor/wall collision, game framework, level initialization, level saving/loading, art acquisition.
-
