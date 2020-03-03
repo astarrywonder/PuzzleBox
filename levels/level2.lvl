@@ -36,10 +36,9 @@ map_legend:
   11:
     type: ClosedBarrier
     link:
-      - 11
+      - 13
   12:
     type: redswitch
-
   13:
     type: plateup
 map_data_raw: |

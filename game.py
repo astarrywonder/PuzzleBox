@@ -29,8 +29,8 @@ config = {
     ,'window_caption': 'Puzzle Game'
     ,'color_backgroud': (0, 0, 0, 1)
     ,'intro_backImg': 'background.jpg'
-    ,'game_characterpath': "./characters/"
-    ,'game_spritepath': "./sprites/"
+    ,'game_characterpath': "characters/"
+    ,'game_spritepath': "sprites/"
     ,'game_tilesize': 24
     ,'gameover_backImg': "GameOver.jpg"
 }
@@ -174,7 +174,9 @@ class Player:
         self.img_jack = pg.image.load(config['game_characterpath'] + "Jack/Right.gif").convert()
         self.img = self.img_jill
         self.img_changed = False
-        self.rect = self.img.get_rect()
+        self.rect_sprite = self.img.get_rect()
+        self.rect = self.rect_sprite
+        self.facing_left = False
 
         self.current_collision_type = {'top': False, 'bottom': False, 'right': False, 'left': False}
 
@@ -183,14 +185,16 @@ class Player:
         self.moving_speed = 4
 
         self.moving_jumping = False
-        self.jump_speed = -7
+        self.jump_speed = -6
         self.vertical_momentum = 0
         self.air_timer = 0
 
-        self.facing_left = False
+        self.interact_pressed = False
 
         self.jump_sound = pg.mixer.Sound('./sounds/jump.wav')
         self.jump_sound.set_volume(0.3)
+
+
 
         # self.carrying = False
         # self.telported = False
@@ -206,12 +210,16 @@ class Player:
             self.img = self.img_jill
 
     def get_event(self, event):
-        self.get_event_always(event)
         if event.type == pg.KEYDOWN:
             if event.key in [pg.K_c]:
                 if not self.img_changed:
                     self.switch_char()
-                self.img_changed = True
+                    self.img_changed = True
+            if event.key in [pg.K_k]:
+                if not self.interact_pressed:
+                    self.interact_pressed = True
+        self.get_event_always(event)
+
 
     def get_event_always(self, event):
         if event.type == pg.KEYDOWN:
@@ -233,8 +241,10 @@ class Player:
         if event.type == pg.KEYUP:
             if event.key in [pg.K_c]:
                 self.img_changed = False
+            if event.key in [pg.K_k]:
+                self.interact_pressed = False
 
-    def update(self, tiles):
+    def update(self, impassable, logicobjs, movebox):
         movement = [0, 0]
         if self.moving_left:
             movement[0] -= self.moving_speed
@@ -258,7 +268,18 @@ class Player:
         movement[1] += self.vertical_momentum
         self.vertical_momentum += 0.3
 
-        self.rect, self.current_collision_type = self.move(self.rect, movement, tiles)
+        tiles = impassable.copy()
+
+        for logic in logicobjs:
+            if logicobjs[logic].type in ['ClosedBarrier']:
+                if not logicobjs[logic].activated:
+                    tiles[logic] = logicobjs[logic]
+
+        for box in movebox:
+            tiles[box] = movebox[box]
+
+        collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
+        self.rect, self.current_collision_type = self.move(collision_types, self.rect, movement, tiles)
 
         if self.current_collision_type['bottom']:
             self.air_timer = 0
@@ -273,8 +294,7 @@ class Player:
                 hit_list.append(tiles[key].rect)
         return hit_list
 
-    def move(self, rect, movement, tiles): # Public Domain by DaFluffyPotato
-        collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
+    def move(self, collision_types, rect, movement, tiles): # Public Domain by DaFluffyPotato
         rect.x += movement[0]
         hit_list = self.collision_test(rect, tiles)
         for tile in hit_list:
@@ -315,7 +335,7 @@ class Tile:
 class Helpbox(Tile):
     def __init__(self, unscaled_x, unscaled_y, text):
         super(Helpbox, self).__init__(unscaled_x, unscaled_y, 'helpbox')
-        self.activate = False
+        self.activated = False
 
         self.text = text
         self.font = pg.font.SysFont('freesansbold.ttf', 32)
@@ -324,14 +344,14 @@ class Helpbox(Tile):
 
     def update(self, player):
         if self.rect.colliderect(player.rect):
-            self.activate = True
+            self.activated = True
         else:
-            self.activate = False
+            self.activated = False
 
     def draw(self, screen):
         screen.blit(self.img, (self.rect.x, self.rect.y))
         # screen.blit(pg.transform.flip(self.img, self.activate, False), (self.rect.x, self.rect.y))
-        if self.activate:
+        if self.activated:
             textobj = self.font.render(self.text, 1, self.textcolor)
             textrect = textobj.get_rect()
             textrect.center = self.textlocation
@@ -354,6 +374,8 @@ class Redswitch(Tile):
         self.img_green = pg.image.load(config['game_spritepath'] + 'greenswitch' + '.png').convert()
         self.img = self.img_red
         self.activated = False
+        self.cooldown = False
+
 
     def toggle(self):
         if self.img == self.img_red:
@@ -363,52 +385,86 @@ class Redswitch(Tile):
             self.img = self.img_red
             self.activated = False
 
-    def update(self, player, map_logic, map_logic_table):
-        if self.rect.colliderect(player.rect) and not self.activated:
+    def update(self, player, map_logic, map_logic_table, map_movebox):
+        if self.rect.colliderect(player.rect) and player.interact_pressed and not self.cooldown:
             self.toggle()
+            self.cooldown = True
+        if self.rect.colliderect(player.rect) and not player.interact_pressed:
+            self.cooldown = False
 
 
     def draw(self, screen):
         screen.blit(self.img, (self.rect.x, self.rect.y))
 
-
 class Barrier(Tile):
     def __init__(self, unscaled_x, unscaled_y, link):
         super(Barrier, self).__init__(unscaled_x, unscaled_y, 'ClosedBarrier')
         self.links = link
-        self.img_closed = pg.image.load(config['game_spritepath'] + 'OpenBarrier' + '.png').convert()
-        self.img_open = pg.image.load(config['game_spritepath'] + 'ClosedBarrier' + '.png').convert()
+        self.img_closed = pg.image.load(config['game_spritepath'] + 'ClosedBarrier' + '.png').convert()
+        self.img_open = pg.image.load(config['game_spritepath'] + 'OpenBarrier' + '.png').convert()
         self.img = self.img_closed
+        self.opened = False
         self.activated = False
+        self.barrier_sound = pg.mixer.Sound('sounds/doorsound.wav')
+        self.barrier_sound.set_volume(0.5)
+
 
     def open(self):
         self.img = self.img_open
         self.activated = True
+        self.barrier_sound.play()
 
     def close(self):
         self.img = self.img_closed
         self.activated = False
+        self.barrier_sound.play()
 
-    def update(self, player, map_logic, map_logic_table):
+    def update(self, player, map_logic, map_logic_table, map_movebox):
         self.activated = False
         for link in self.links:
             if map_logic[map_logic_table[link]].activated:
                 self.activated = True
-        if self.activated:
+        if self.activated and not self.opened:
+            self.opened = True
             self.open()
-        else:
+        elif not self.activated and self.opened:
+            self.opened = False
             self.close()
-    # def draw(self, screen):
-    #     screen.blit(self.img, (self.rect.x, self.rect.y))
+
+
+    def draw(self, screen):
+        screen.blit(self.img, (self.rect.x, self.rect.y))
 
 class Plate(Tile):
     def __init__(self, unscaled_x, unscaled_y):
         super(Plate, self).__init__(unscaled_x, unscaled_y, 'plateup')
-    def update(self, player, map_logic, map_logic_table):
-        pass
-    #
-    # def draw(self, screen):
-    #     screen.blit(self.img, (self.rect.x, self.rect.y))
+
+
+        self.img_platedown = pg.image.load(config['game_spritepath'] + 'platedown' + '.png').convert()
+        self.img = self.img_platedown
+        self.img_plateup = pg.image.load(config['game_spritepath'] + 'plateup' + '.png').convert()
+        self.img_plateup.set_colorkey((255,255,255))
+
+        self.rect = self.img_platedown.get_rect()
+        self.rect.x = unscaled_x * config['game_tilesize']
+        self.rect.y = unscaled_y * config['game_tilesize']
+
+        self.rect_plate = self.img_plateup.get_rect()
+        self.rect_plate.x = self.rect.x
+        self.rect_plate.y = self.rect.y - 4
+        self.activated = False
+
+    def update(self, player, map_logic, map_logic_table, map_movebox):
+        if self.rect_plate.colliderect(player.rect):
+            self.activated = True
+        else:
+            self.activated = False
+
+    def draw(self, screen):
+        if self.activated:
+            screen.blit(self.img, (self.rect.x, self.rect.y))
+        else:
+            screen.blit(self.img_plateup, (self.rect_plate.x, self.rect_plate.y))
 
 class Goal(Tile):
     def __init__(self, unscaled_x, unscaled_y):
@@ -514,7 +570,7 @@ class Stage:
         for tile in self.map_movebox:
             self.map_movebox[tile].update(player)
         for tile in self.map_logic:
-            self.map_logic[tile].update(player, self.map_logic, self.map_logic_table)
+            self.map_logic[tile].update(player, self.map_logic, self.map_logic_table, self.map_movebox)
         for tile in self.map_goal:
             if self.map_goal[tile].update(player):
                 self.stage_finished = True
@@ -644,25 +700,25 @@ class Game_logic:
                     if event.key in [pg.K_ESCAPE, pg.K_c]:
                         if not self.paused_pressed:
                             self.paused = not self.paused
-                        self.paused_pressed = True
+                            self.paused_pressed = True
                     if event.key in [pg.K_q]:
                         pg.quit()
                         sys.exit()
                     if event.key in [pg.K_s]:
                         if not self.saving_game:
                             self.savegame()
-                        self.saving_game = True
+                            self.saving_game = True
                 self.player.get_event_always(event)
             else:
                 if event.type == pg.KEYDOWN:
                     if event.key == pg.K_r:
                         if not self.stage_resetted:
                             self.reset_stage()
-                        self.stage_resetted = True
+                            self.stage_resetted = True
                     if event.key == pg.K_ESCAPE:
                         if not self.paused_pressed:
                             self.paused = not self.paused
-                        self.paused_pressed = True
+                            self.paused_pressed = True
                 if event.type == pg.KEYUP:
                     if event.key == pg.K_r:
                         self.stage_resetted = False
@@ -670,7 +726,7 @@ class Game_logic:
 
     def update(self):
         if not self.paused:
-            self.player.update(self.stage.map_tiles)
+            self.player.update(self.stage.map_tiles, self.stage.map_logic, self.stage.map_movebox)
             self.stage_finished = self.stage.update(self.player)
         else:
             self.stage.update_pause()
@@ -729,7 +785,7 @@ def start():
     pg.font.init()
 
     pg.display.set_caption(config['window_caption'])
-    pg.display.set_icon(pg.image.load("./sprites/icon.jpg"))
+    pg.display.set_icon(pg.image.load("sprites/icon.jpg"))
     pg.display.set_mode((config['window_width'], config['window_height']), 0, 32)
 
     intro = Game_intro()
