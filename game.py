@@ -409,14 +409,22 @@ class Movebox(Tile):
         self.carried = False
         self.vertical_momentum = 0
         self.current_collision_type = {'top': False, 'bottom': False, 'right': False, 'left': False}
+        self.box_sound = pg.mixer.Sound('./sounds/box_drop.wav')
+        self.box_sound.set_volume(0.5)
 
-    def pickup(self, player):
-        self.carried = True
-        player.carrying = True
-        player.bag = self
-        self.cooldown = True
-        self.rect.center = player.rect.center
-        self.rect.bottom = player.rect.top
+    def pickup(self, player, impassable):
+        temprect = self.rect.copy()
+        temprect.center = player.rect.center
+        temprect.bottom = player.rect.top
+        tiles = impassable.copy()
+
+        if len(self.collision_test(temprect, tiles)) == 0:
+            self.carried = True
+            player.carrying = True
+            player.bag = self
+            self.cooldown = True
+            self.rect = temprect
+
 
     def drop(self, player, impassable, movebox):
         temprect = self.rect.copy()
@@ -433,12 +441,14 @@ class Movebox(Tile):
                 tiles.pop(box, None)
 
         if len(self.collision_test(temprect, tiles)) == 0:
+            self.box_sound.play()
             self.rect = temprect
             self.carried = False
             player.carrying = False
             player.bag = None
             player.busy_box = 12
             self.cooldown = True
+
 
     def collision_test(self, rect, tiles):  # Public Domain by DaFluffyPotato
         hit_list = []
@@ -459,9 +469,9 @@ class Movebox(Tile):
     def update(self, player, impassable, movebox):
 
         if self.rect.colliderect(player.rect_range1) and player.interact_pressed and not self.cooldown and not player.carrying and player.busy_box == 0:
-            self.pickup(player)
+            self.pickup(player, impassable)
         elif self.rect.colliderect(player.rect_range2) and player.interact_pressed and not self.cooldown and not player.carrying and player.busy_box == 0:
-            self.pickup(player)
+            self.pickup(player, impassable)
         elif self.carried and player.interact_pressed and not self.cooldown:
             self.drop(player, impassable, movebox)
         elif not player.interact_pressed and self.cooldown:
@@ -540,9 +550,15 @@ class Barrier(Tile):
 
     def update(self, map_logic, map_logic_table):
         self.activated = False
+        anyfalse = False
         for link in self.links:
             if map_logic[map_logic_table[link]].activated:
                 self.activated = True
+            else:
+                anyfalse = True
+        if anyfalse:
+            self.activated = False
+
         if self.activated and not self.opened:
             self.opened = True
             self.open()
@@ -676,6 +692,7 @@ class Stage:
                     map_data_logic_table[current_id] = str(x) + ';' + str(y)
                 elif type in ['plateup']:
                     map_data_logic[str(x) + ';' + str(y)] = Plate(x, y)
+                    map_data_impassable[str(x) + ';' + str(y)] = Tile(x, y, 'floor')
                     map_data_logic_table[current_id] = str(x) + ';' + str(y)
                 else:
                     map_data_impassable[str(x) + ';' + str(y)] = Tile(x, y, type)
