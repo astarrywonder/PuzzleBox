@@ -175,6 +175,8 @@ class Player:
         self.img = self.img_jill
         self.img_changed = False
         self.rect_sprite = self.img.get_rect()
+        self.rect_range1 = pg.Rect(0, 0, config['game_tilesize']/2, config['game_tilesize']-4)
+        self.rect_range2 = pg.Rect(0, 0, config['game_tilesize']/2, config['game_tilesize']-4)
         self.rect = self.rect_sprite
         self.facing_left = False
 
@@ -195,8 +197,10 @@ class Player:
         self.jump_sound.set_volume(0.3)
 
 
+        self.busy_box = 0
+        self.carrying = False
+        self.bag = None
 
-        # self.carrying = False
         # self.telported = False
 
     def teleport(self, location):
@@ -245,11 +249,22 @@ class Player:
                 self.interact_pressed = False
 
     def update(self, impassable, logicobjs, movebox):
+        tiles = impassable.copy()
+        if self.facing_left:
+            self.rect_range1.right = self.rect.left
+            self.rect_range2.right = self.rect.left
+        else:
+            self.rect_range1.left = self.rect.right
+            self.rect_range2.left = self.rect.right
+        self.rect_range1.top = self.rect.top
+        self.rect_range2.top = self.rect_range1.bottom + 1
         movement = [0, 0]
-        if self.moving_left:
-            movement[0] -= self.moving_speed
-        if self.moving_right:
-            movement[0] += self.moving_speed
+
+        if self.busy_box == 0:
+            if self.moving_left:
+                movement[0] -= self.moving_speed
+            if self.moving_right:
+                movement[0] += self.moving_speed
 
         if movement[0] > 0:
             self.facing_left = False
@@ -268,24 +283,31 @@ class Player:
         movement[1] += self.vertical_momentum
         self.vertical_momentum += 0.3
 
-        tiles = impassable.copy()
-
         for logic in logicobjs:
             if logicobjs[logic].type in ['ClosedBarrier']:
                 if not logicobjs[logic].activated:
                     tiles[logic] = logicobjs[logic]
+                else:
+                    tiles.pop(logic, None)
 
         for box in movebox:
-            tiles[box] = movebox[box]
+            if not movebox[box].carried:
+                tiles[box] = movebox[box]
+            else:
+                tiles.pop(box, None)
 
         collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
-        self.rect, self.current_collision_type = self.move(collision_types, self.rect, movement, tiles)
+        self.rect, self.current_collision_type = self.move(collision_types, self.rect, movement, tiles, self.bag)
 
         if self.current_collision_type['bottom']:
             self.air_timer = 0
             self.vertical_momentum = 0
         else:
             self.air_timer += 1
+
+        if self.busy_box > 0:
+            self.busy_box -= 1
+
 
     def collision_test(self, rect, tiles): # Public Domain by DaFluffyPotato
         hit_list = []
@@ -294,25 +316,50 @@ class Player:
                 hit_list.append(tiles[key].rect)
         return hit_list
 
-    def move(self, collision_types, rect, movement, tiles): # Public Domain by DaFluffyPotato
+    def move(self, collision_types, rect, movement, tiles, bag): # Public Domain by DaFluffyPotato
         rect.x += movement[0]
-        hit_list = self.collision_test(rect, tiles)
+        temprect = rect.copy()
+        if not bag == None:
+            bag.rect.x += movement[0]
+            temprect.union_ip(bag.rect)
+        hit_list = self.collision_test(temprect, tiles)
         for tile in hit_list:
             if movement[0] > 0:
-                rect.right = tile.left
+                if not bag == None:
+                    bag.rect.right = tile.left
+                    rect.right = tile.left
+                else:
+                    rect.right = tile.left
                 collision_types['right'] = True
             elif movement[0] < 0:
-                rect.left = tile.right
+                if not bag == None:
+                    bag.rect.left = tile.right
+                    rect.left = tile.right
+                else:
+                    rect.left = tile.right
                 collision_types['left'] = True
         rect.y += movement[1]
-        hit_list = self.collision_test(rect, tiles)
+        temprect = rect.copy()
+        if not bag == None:
+            bag.rect.y += movement[1]
+            temprect.union_ip(bag.rect)
+        hit_list = self.collision_test(temprect, tiles)
         for tile in hit_list:
             if movement[1] > 0:
                 rect.bottom = tile.top
                 collision_types['bottom'] = True
             elif movement[1] < 0:
-                rect.top = tile.bottom
+                if not bag == None:
+                    bag.rect.top = tile.bottom
+                    rect.top = bag.rect.bottom
+                else:
+                    rect.top = tile.bottom
                 collision_types['top'] = True
+
+        if not bag == None:
+            if rect.colliderect(bag.rect):
+                bag.rect.bottom = rect.top
+
         return rect, collision_types
 
     def draw(self,screen):
@@ -325,9 +372,6 @@ class Tile:
         self.rect = self.img.get_rect()
         self.rect.x = unscaled_x * config['game_tilesize']
         self.rect.y = unscaled_y * config['game_tilesize']
-
-    def update(self, player):
-        pass
 
     def draw(self, screen):
         screen.blit(self.img, (self.rect.x, self.rect.y))
@@ -358,14 +402,92 @@ class Helpbox(Tile):
             screen.blit(textobj, textrect)
 
 class Movebox(Tile):
-    def __init__(self, unscaled_x, unscaled_y):
+    def __init__(self, unscaled_x, unscaled_y, mapid):
         super(Movebox, self).__init__(unscaled_x, unscaled_y, 'movebox')
+        self.mapid = mapid
+        self.cooldown = False
+        self.carried = False
+        self.vertical_momentum = 0
+        self.current_collision_type = {'top': False, 'bottom': False, 'right': False, 'left': False}
 
-    # def update(self):
-    #     pass
-    #
-    # def draw(self, screen):
-    #     screen.blit(self.img, (self.rect.x, self.rect.y))
+    def pickup(self, player):
+        self.carried = True
+        player.carrying = True
+        player.bag = self
+        self.cooldown = True
+        self.rect.center = player.rect.center
+        self.rect.bottom = player.rect.top
+
+    def drop(self, player, impassable, movebox):
+        temprect = self.rect.copy()
+        if player.facing_left:
+            temprect.right = player.rect.left
+        else:
+            temprect.left = player.rect.right
+
+        tiles = impassable.copy()
+        for box in movebox:
+            if not movebox[box].carried and box != self.mapid:
+                tiles[box] = movebox[box]
+            else:
+                tiles.pop(box, None)
+
+        if len(self.collision_test(temprect, tiles)) == 0:
+            self.rect = temprect
+            self.carried = False
+            player.carrying = False
+            player.bag = None
+            player.busy_box = 12
+            self.cooldown = True
+
+    def collision_test(self, rect, tiles):  # Public Domain by DaFluffyPotato
+        hit_list = []
+        for key in tiles:
+            if rect.colliderect(tiles[key].rect):
+                hit_list.append(tiles[key].rect)
+        return hit_list
+
+    def move(self, collision_types, rect, movement, tiles):  # Public Domain by DaFluffyPotato
+        rect.y += movement[1]
+        hit_list = self.collision_test(rect, tiles)
+        for tile in hit_list:
+            if movement[1] > 0:
+                rect.bottom = tile.top
+                collision_types['bottom'] = True
+        return rect, collision_types
+
+    def update(self, player, impassable, movebox):
+
+        if self.rect.colliderect(player.rect_range1) and player.interact_pressed and not self.cooldown and not player.carrying and player.busy_box == 0:
+            self.pickup(player)
+        elif self.rect.colliderect(player.rect_range2) and player.interact_pressed and not self.cooldown and not player.carrying and player.busy_box == 0:
+            self.pickup(player)
+        elif self.carried and player.interact_pressed and not self.cooldown:
+            self.drop(player, impassable, movebox)
+        elif not player.interact_pressed and self.cooldown:
+            self.cooldown = False
+
+        if not self.carried:
+            movement = [0, 0]
+
+            movement[1] += self.vertical_momentum
+            self.vertical_momentum += 1
+            tiles = impassable.copy()
+            for box in movebox:
+                if not movebox[box].carried and box != self.mapid:
+                    tiles[box] = movebox[box]
+                else:
+                    tiles.pop(box, None)
+            tiles['player'] = player
+
+            collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
+            self.rect, self.current_collision_type = self.move(collision_types, self.rect, movement, tiles)
+
+            if self.current_collision_type['bottom']:
+                self.vertical_momentum = 0
+
+    def draw(self, screen):
+        screen.blit(self.img, (self.rect.x, self.rect.y))
 
 class Redswitch(Tile):
     def __init__(self, unscaled_x, unscaled_y):
@@ -376,7 +498,6 @@ class Redswitch(Tile):
         self.activated = False
         self.cooldown = False
 
-
     def toggle(self):
         if self.img == self.img_red:
             self.img = self.img_green
@@ -385,13 +506,12 @@ class Redswitch(Tile):
             self.img = self.img_red
             self.activated = False
 
-    def update(self, player, map_logic, map_logic_table, map_movebox):
+    def update(self, player):
         if self.rect.colliderect(player.rect) and player.interact_pressed and not self.cooldown:
             self.toggle()
             self.cooldown = True
         if self.rect.colliderect(player.rect) and not player.interact_pressed:
             self.cooldown = False
-
 
     def draw(self, screen):
         screen.blit(self.img, (self.rect.x, self.rect.y))
@@ -408,7 +528,6 @@ class Barrier(Tile):
         self.barrier_sound = pg.mixer.Sound('sounds/doorsound.wav')
         self.barrier_sound.set_volume(0.5)
 
-
     def open(self):
         self.img = self.img_open
         self.activated = True
@@ -419,7 +538,7 @@ class Barrier(Tile):
         self.activated = False
         self.barrier_sound.play()
 
-    def update(self, player, map_logic, map_logic_table, map_movebox):
+    def update(self, map_logic, map_logic_table):
         self.activated = False
         for link in self.links:
             if map_logic[map_logic_table[link]].activated:
@@ -439,7 +558,6 @@ class Plate(Tile):
     def __init__(self, unscaled_x, unscaled_y):
         super(Plate, self).__init__(unscaled_x, unscaled_y, 'plateup')
 
-
         self.img_platedown = pg.image.load(config['game_spritepath'] + 'platedown' + '.png').convert()
         self.img = self.img_platedown
         self.img_plateup = pg.image.load(config['game_spritepath'] + 'plateup' + '.png').convert()
@@ -454,8 +572,14 @@ class Plate(Tile):
         self.rect_plate.y = self.rect.y - 4
         self.activated = False
 
-    def update(self, player, map_logic, map_logic_table, map_movebox):
+    def update(self, player, map_movebox):
+        collide = False
         if self.rect_plate.colliderect(player.rect):
+            collide = True
+        for box in map_movebox:
+            if self.rect_plate.colliderect(map_movebox[box].rect):
+                collide = True
+        if collide:
             self.activated = True
         else:
             self.activated = False
@@ -543,7 +667,7 @@ class Stage:
                 elif type in ['goal']:
                     map_data_goal[str(x) + ';' + str(y)] = Goal(x, y)
                 elif type in ['movebox']:
-                    map_data_box[str(x) + ';' + str(y)] = Movebox(x, y)
+                    map_data_box[str(x) + ';' + str(y)] = Movebox(x, y, str(x) + ';' + str(y))
                 elif type in ['redswitch']:
                     map_data_logic[str(x) + ';' + str(y)] = Redswitch(x, y)
                     map_data_logic_table[current_id] = str(x) + ';' + str(y)
@@ -568,9 +692,14 @@ class Stage:
         for tile in self.map_helpbox:
             self.map_helpbox[tile].update(player)
         for tile in self.map_movebox:
-            self.map_movebox[tile].update(player)
+            self.map_movebox[tile].update(player, self.map_tiles, self.map_movebox)
         for tile in self.map_logic:
-            self.map_logic[tile].update(player, self.map_logic, self.map_logic_table, self.map_movebox)
+            if self.map_logic[tile].type in ['redswitch']:
+                self.map_logic[tile].update(player)
+            elif self.map_logic[tile].type in ['ClosedBarrier']:
+                self.map_logic[tile].update(self.map_logic, self.map_logic_table)
+            elif self.map_logic[tile].type in ['plateup']:
+                self.map_logic[tile].update(player, self.map_movebox)
         for tile in self.map_goal:
             if self.map_goal[tile].update(player):
                 self.stage_finished = True
