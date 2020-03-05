@@ -798,9 +798,9 @@ class Game_logic:
         self.framerate = config['framerate']
         self.keys = pg.key.get_pressed()
 
-        # self.music_bg = pg.mixer.music.load('./sounds/BGM.wav')
-        # pg.mixer.music.play(-1)
-        # pg.mixer.music.set_volume(0.4)
+        self.music_bg = pg.mixer.music.load('./sounds/BGM.wav')
+        pg.mixer.music.play(-1)
+        pg.mixer.music.set_volume(0.4)
 
         if newgame:
             self.stage_current = "level1"
