@@ -201,7 +201,7 @@ class Player:
         self.carrying = False
         self.bag = None
 
-        # self.telported = False
+        self.teleported = False
 
     def teleport(self, location):
         self.rect.x = location[0]
@@ -223,7 +223,6 @@ class Player:
                 if not self.interact_pressed:
                     self.interact_pressed = True
         self.get_event_always(event)
-
 
     def get_event_always(self, event):
         if event.type == pg.KEYDOWN:
@@ -307,7 +306,6 @@ class Player:
 
         if self.busy_box > 0:
             self.busy_box -= 1
-
 
     def collision_test(self, rect, tiles): # Public Domain by DaFluffyPotato
         hit_list = []
@@ -619,6 +617,31 @@ class Goal(Tile):
     def draw(self, screen):
         screen.blit(self.img, (self.rect.x, self.rect.y))
 
+class Teleporter(Tile):
+    def __init__(self, unscaled_x, unscaled_y, link):
+        super(Teleporter, self).__init__(unscaled_x, unscaled_y, 'Teleporter')
+        self.activated = False
+        self.links = link
+        self.cooldown = False
+        self.activated = False
+        if not link in [None]: # could be cool to link switches to teleporters
+            self.activated = True
+
+    def update(self, player, map_logic, map_logic_table):
+        if self.rect.contains(player.rect) and not player.carrying and not player.teleported and not self.cooldown and self.activated:
+            for link in self.links:
+                linktelporter = map_logic[map_logic_table[link]]
+            player.teleport(linktelporter.rect.topleft) # does not check for space. assumes teleport sprite is big enough for player
+            player.teleported = True
+        elif self.rect.colliderect(player.rect) and player.teleported:
+            self.cooldown = True
+            player.teleported = False
+        elif not self.rect.colliderect(player.rect) and self.cooldown:
+            self.cooldown = False
+
+    def draw(self, screen):
+        screen.blit(self.img, (self.rect.x, self.rect.y))
+
 class Stage:
     def __init__(self, levelname):
         self.stage_data = self.load_stagedata(levelname)
@@ -694,6 +717,12 @@ class Stage:
                     map_data_logic[str(x) + ';' + str(y)] = Plate(x, y)
                     map_data_impassable[str(x) + ';' + str(y)] = Tile(x, y, 'floor')
                     map_data_logic_table[current_id] = str(x) + ';' + str(y)
+                elif type in ['Teleporter']:
+                    if 'link' in current_legendentry:
+                        map_data_logic[str(x) + ';' + str(y)] = Teleporter(x, y, current_legendentry['link'])
+                    else:
+                        map_data_logic[str(x) + ';' + str(y)] = Teleporter(x, y, None)
+                    map_data_logic_table[current_id] = str(x) + ';' + str(y)
                 else:
                     map_data_impassable[str(x) + ';' + str(y)] = Tile(x, y, type)
 
@@ -717,6 +746,8 @@ class Stage:
                 self.map_logic[tile].update(self.map_logic, self.map_logic_table)
             elif self.map_logic[tile].type in ['plateup']:
                 self.map_logic[tile].update(player, self.map_movebox)
+            elif self.map_logic[tile].type in ['Teleporter']:
+                self.map_logic[tile].update(player, self.map_logic, self.map_logic_table)
         for tile in self.map_goal:
             if self.map_goal[tile].update(player):
                 self.stage_finished = True
@@ -735,10 +766,10 @@ class Stage:
             self.map_helpbox[tile].draw(screen)
         for tile in self.map_goal:
             self.map_goal[tile].draw(screen)
-        for tile in self.map_movebox:
-            self.map_movebox[tile].draw(screen)
         for tile in self.map_logic:
             self.map_logic[tile].draw(screen)
+        for tile in self.map_movebox:
+            self.map_movebox[tile].draw(screen)
 
         if self.time_elap < 60:
             time_str = time.strftime("Time: %Ss", time.gmtime(self.time_elap))

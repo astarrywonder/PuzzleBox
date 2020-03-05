@@ -4,21 +4,21 @@ player_spawn:
   x: 48
   y: 540
 map_legend:
-  00:
+  0:
     type: empty
-  01:
+  1:
     type: wall
-  02:
+  2:
     type: floor
-  03:
+  3:
     type: goal
-  04:
+  4:
     type: helpbox
     text: "<<Press A and D to move Left and Right>>"
-  05:
+  5:
     type: helpbox
     text: "<<Press J to Jump>>"
-  06:
+  6:
     type: helpbox
     text: "<<Reach the door to complete the level>>"
 map_data_raw: |
